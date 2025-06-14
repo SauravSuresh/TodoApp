@@ -25,11 +25,115 @@
         <div class="container">
             <div id="new-todo">
                 <input type="text" placeholder="Tasks to be done"/>
+                <button id="submit">Add</button>
             </div>
             <div id="todos">
 
             </div>
         </div>
+        <script>
+          const localhostAddress = "http://localhost:9000/todo";
+          const newTodoInput = document.querySelector("#new-todo input");
+          let submitButton = document.querySelector("#submit");
+          let deleteButtonm = document.querySelector(`.delete`)
+
+          async function getTodos() {
+            try{
+              const response = await fetch(localhostAddress)
+              const responseData = await response.json();
+              console.log("Fetched todos array:", responseData.data);
+              return responseData.data || [];
+            }catch(error){
+              console.error("Error:",error)
+              return [];
+            }
+          }
+
+          async function CreateTodo(data){
+            try{
+              const response = await fetch(localhostAddress, {
+                method:"POST",
+                headers:{
+                  "Content-Type":"application/json",
+                },
+                body:JSON.stringify(data),
+              })
+              const result = await response.json();
+              console.log("success",result.message);
+            }catch (error){
+              console.error("Error:",error);
+              return [];
+            }
+          }
+
+          async function DeleteTodo(TodoID){
+            console.log("Entering DeleteTodo with ID:", TodoID);
+            try{
+              const response = await fetch(`${localhostAddress}/${TodoID}`,{
+                method:"DELETE",
+              });
+              console.log("Delete response status:", response.status);
+              const rawDeleteText = await response.text();
+              console.log("Raw delete response:", rawDeleteText);
+              const result = JSON.parse(rawDeleteText);
+              console.log("Success:", result.message)
+            }catch(error){
+              console.error("error:",error)
+            }
+          }
+
+          function deleteTaskButton(){
+            const deleteTodoButtons = document.querySelectorAll(".delete")
+            for (const deleteButton of deleteTodoButtons){
+              deleteButton.onclick = async function () {
+            const todoID = deleteButton.getAttribute("data-id");
+            console.log("Delete button clicked for ID:", todoID);
+            await DeleteTodo(todoID);
+            displayTodos();
+};
+            }
+          }
+
+          async function addTask() {
+            const data = { title: newTodoInput.value };
+            await CreateTodo(data);
+            displayTodos();
+            newTodoInput.value="";
+          }
+
+          async function displayTodos() {
+            const todolist = await getTodos();
+            let todoContainerList = document.querySelector("#todos");
+            todoContainerList.innerHTML = "";
+            if (todolist.length==0){
+              todoContainerList.innerHTML +=`
+              <div class="todo">
+                <span>You do not have any todos</span>
+              </div>
+                `;
+            }else{
+              todolist.forEach((todo) => {
+                todoContainerList.innerHTML+=`
+                  <div class ="todo">
+                    <span>${todo.title}</span>
+                    <div class="actions">
+                      <button class = "edit">
+                        <i class="fas fa-edit"></i>
+                        </button>
+                       <button data-id=${todo.id} class="delete">
+                <i class="far fa-trash-alt"></i>
+                </button>
+                      </div>
+                    </div>
+                `
+              });
+            }
+            deleteTaskButton();
+          }
+          displayTodos();
+
+          submitButton.addEventListener("click", () => addTask());
+        </script>
       </body>
 </html>
 {{end}}

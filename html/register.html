@@ -1,0 +1,120 @@
+{{define "registerPage"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Register</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #eef2f3;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        .register-container {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            width: 320px;
+        }
+
+        .register-container h2 {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .register-container input[type="text"],
+        .register-container input[type="email"],
+        .register-container input[type="password"] {
+            width: 100%;
+            padding: 0.5rem;
+            margin: 0.5rem 0;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        .register-container input[type="submit"] {
+            width: 100%;
+            padding: 0.6rem;
+            margin-top: 1rem;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .register-container input[type="submit"]:hover {
+            background-color: #0056b3;
+        }
+
+        .register-container p {
+            text-align: center;
+            margin-top: 1rem;
+        }
+
+        .register-container p a {
+            color: #333;
+            text-decoration: none;
+        }
+
+        .register-container p a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+</form>
+    <form id="registerForm" class="register-container">
+        <h2>Register</h2>
+        <input type="text" id="username" placeholder="Username" required />
+        <input type="email" id="email" placeholder="Email" required />
+        <input type="password" id="password" placeholder="Password" required />
+        <input type="submit" value="Create Account" />
+        <p>Already have an account? <a href="/">Login</a></p>
+    </form>
+
+    <script>
+        document.getElementById("registerForm").addEventListener("submit", async function (e) {
+            e.preventDefault();
+
+            const payload = {
+                username: document.getElementById("username").value,
+                email: document.getElementById("email").value,
+                password: document.getElementById("password").value
+            };
+
+            try {
+  const response = await fetch("/auth/register", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  let result;
+  try {
+    result = await response.json();
+  } catch {
+    result = { message: "No response body" };
+  }
+
+  if (response.ok) {
+    alert(result.message || "User created successfully");
+    window.location.href = "/auth/login";
+  } else {
+    alert("Registration failed: " + (result.message || "Unknown error"));
+  }
+} catch (error) {
+  alert("Error registering user: " + error);
+}
+        });
+    </script>
+</body>
+</html>
+{{end}}

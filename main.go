@@ -11,7 +11,6 @@ import (
 
 	"github.com/SauravSuresh/todoapp/common"
 	"github.com/SauravSuresh/todoapp/handlers"
-	"github.com/SauravSuresh/todoapp/middlewares"
 	"github.com/SauravSuresh/todoapp/utils"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
@@ -21,13 +20,26 @@ import (
 
 func TodoHandlers() chi.Router {
 	router := chi.NewRouter()
-	router.Use(middlewares.AuthenticationMiddelware)
+	router.Use(middleware.Logger)
+	// router.Use(middlewares.AuthenticationMiddelware)
 	router.Group(func(r chi.Router) {
+		r.Get("/index", handlers.IndexHandler)
 		r.Get("/", handlers.GetTodoHandler)
 		r.Post("/", handlers.CreateTodoHandler)
 		r.Put("/{id}", handlers.UpdateTodoHandler)
 		r.Delete("/{id}", handlers.DeleteTodoHandler)
 
+	})
+	return router
+}
+
+func LoginHandlers() chi.Router {
+	router := chi.NewRouter()
+	router.Use(middleware.Logger)
+	router.Group(func(r chi.Router) {
+		r.Post("/register", handlers.RegisterUserHandler)
+		r.Get("/login", handlers.LoginPageHandler)
+		r.Post("/attemptLogin", handlers.LoginAttemptHandler)
 	})
 	return router
 }
@@ -53,6 +65,7 @@ func main() {
 
 	router.Get("/", handlers.HomeHandler)
 
+	router.Mount("/auth", LoginHandlers())
 	router.Mount("/todo", TodoHandlers())
 
 	stopChan := make(chan os.Signal, 1)

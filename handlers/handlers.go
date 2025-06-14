@@ -29,6 +29,13 @@ func init() {
 func HomeHandler(rw http.ResponseWriter, r *http.Request) {
 	// err := rnd.JSON(rw, http.StatusOK, "./readme.md")
 	// utils.CheckErr(err, "failed to send response from home handler")
+	err := rnd.HTML(rw, http.StatusOK, "registerPage", nil)
+	utils.CheckErr(err, "failed to send response from home handler")
+}
+
+func IndexHandler(rw http.ResponseWriter, r *http.Request) {
+	// err := rnd.JSON(rw, http.StatusOK, "./readme.md")
+	// utils.CheckErr(err, "failed to send response from home handler")
 	err := rnd.HTML(rw, http.StatusOK, "indexPage", nil)
 	utils.CheckErr(err, "failed to send response from home handler")
 }
@@ -37,7 +44,7 @@ func GetTodoHandler(rw http.ResponseWriter, r *http.Request) {
 	var todoListFromDB = []common.TodoModel{}
 	filter := bson.D{}
 
-	cursor, err := common.Db.Collection(common.GetCollectionName()).Find(context.Background(), filter)
+	cursor, err := common.Db.Collection(common.GetTodoCollectionName()).Find(context.Background(), filter)
 	if err != nil {
 		log.Printf("failed to fetch todo records from db %v \n", err.Error())
 		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
@@ -76,7 +83,7 @@ func CreateTodoHandler(rw http.ResponseWriter, r *http.Request) {
 	}
 	newTodoForDB := newTodoFromRequest.ToTodoModel()
 
-	data, err := common.Db.Collection(common.GetCollectionName()).InsertOne(r.Context(), newTodoForDB)
+	data, err := common.Db.Collection(common.GetTodoCollectionName()).InsertOne(r.Context(), newTodoForDB)
 	if err != nil {
 		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
 			"message": "Failed to add todo to db",
@@ -122,7 +129,7 @@ func UpdateTodoHandler(rw http.ResponseWriter, r *http.Request) {
 		"title":     updateTodofromRequest.Title,
 		"completed": updateTodofromRequest.Completed,
 	}}
-	data, err := common.Db.Collection(common.GetCollectionName()).UpdateOne(r.Context(), filter, update)
+	data, err := common.Db.Collection(common.GetTodoCollectionName()).UpdateOne(r.Context(), filter, update)
 	if err != nil {
 		log.Printf("failed to update db collection: %v\n", err.Error())
 		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
@@ -149,7 +156,7 @@ func DeleteTodoHandler(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	filter := bson.M{"_id": res}
-	if data, err := common.Db.Collection(common.GetCollectionName()).DeleteOne(r.Context(), filter); err != nil {
+	if data, err := common.Db.Collection(common.GetTodoCollectionName()).DeleteOne(r.Context(), filter); err != nil {
 		log.Printf("could not delete item from database: %v\n", err.Error())
 		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
 			"message": "an error occurred while deleting todo item",
@@ -161,4 +168,81 @@ func DeleteTodoHandler(rw http.ResponseWriter, r *http.Request) {
 			"data":    data,
 		})
 	}
+}
+
+func RegisterUserHandler(rw http.ResponseWriter, r *http.Request) {
+	var newUserFromRequest common.User
+	if err := json.NewDecoder(r.Body).Decode(&newUserFromRequest); err != nil {
+		fmt.Println("OOMBI")
+		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
+			"message": "Failed to decode JSON",
+			"error":   err,
+		})
+		return
+	}
+	newUsertoDb := newUserFromRequest.ToUserModel()
+	data, err := common.Db.Collection(common.GetUserCollectionName()).InsertOne(r.Context(), newUsertoDb)
+	if err != nil {
+		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
+			"message": "Failed to add user to db",
+			"error":   err,
+		})
+		return
+	}
+	rnd.JSON(rw, http.StatusOK, renderer.M{
+		"message": "user created successfully",
+		"ID":      data.InsertedID,
+	})
+
+}
+
+func LoginPageHandler(rw http.ResponseWriter, r *http.Request) {
+	// err := rnd.JSON(rw, http.StatusOK, "./readme.md")
+	// utils.CheckErr(err, "failed to send response from home handler")
+	err := rnd.HTML(rw, http.StatusOK, "loginPage", nil)
+	utils.CheckErr(err, "failed to send response from home handler")
+}
+
+func LoginAttemptHandler(rw http.ResponseWriter, r *http.Request) {
+	var userfromRequest common.User
+	fmt.Println(r.Body)
+	if err := json.NewDecoder(r.Body).Decode(&userfromRequest); err != nil {
+		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
+			"message": "Failed to decode JSON",
+			"error":   err,
+		})
+		return
+	}
+	if userfromRequest.Email == "" || userfromRequest.Password == "" {
+		rnd.JSON(rw, http.StatusBadRequest, renderer.M{
+			"message": "email and password cannot be empty",
+		})
+		return
+	}
+
+	var userFromDB common.UserModel
+	err := common.Db.Collection(common.GetUserCollectionName()).FindOne(
+		r.Context(),
+		bson.M{"email": userfromRequest.Email},
+	).Decode(&userFromDB)
+
+	if err != nil {
+		rnd.JSON(rw, http.StatusUnauthorized, renderer.M{
+			"message": "User Not found",
+		})
+		return
+	}
+
+	err = utils.ComparePassword(userFromDB.Password, userfromRequest.Password)
+	if err != nil {
+		rnd.JSON(rw, http.StatusUnauthorized, renderer.M{
+			"message": "Incorrect Password",
+		})
+		return
+	}
+
+	rnd.JSON(rw, http.StatusOK, renderer.M{
+		"message": "Login successful",
+		"ID":      userFromDB.ID,
+	})
 }

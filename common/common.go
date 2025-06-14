@@ -6,12 +6,16 @@ import (
 )
 
 const (
-	dbname     = "todo-database"
-	collection = "todo"
+	dbname          = "todo-database"
+	todo_collection = "todo"
+	user_collection = "users"
 )
 
-func GetCollectionName() string {
-	return collection
+func GetTodoCollectionName() string {
+	return todo_collection
+}
+func GetUserCollectionName() string {
+	return user_collection
 }
 
 func GetDbName() string {
@@ -23,7 +27,7 @@ var Db *mongo.Database
 
 type (
 	TodoModel struct {
-		ID        primitive.ObjectID `bson:"id,omitempty"`
+		ID        primitive.ObjectID `bson:"_id,omitempty"`
 		Title     string             `bson:"title"`
 		CreatedAt primitive.DateTime `bson:"string"`
 		DueDate   primitive.DateTime `bson:"duedate"`
@@ -43,10 +47,18 @@ type (
 		Data    []Todo `json:"data"`
 	}
 
+	UserModel struct {
+		ID       primitive.ObjectID `bson:"id"`
+		Username string             `bson:"username"`
+		Email    string             `bson:email`
+		Password string             `bson:"password";`
+	}
+
 	User struct {
-		ID       uint   `json:"id"`
+		ID       string `json:"id,omitempty"`
 		Username string `json:"username"`
-		Password string `json:"password";`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 )
 
@@ -71,5 +83,18 @@ func (tm Todo) ToTodoModel() TodoModel {
 		CreatedAt: tm.CreatedAt,
 		DueDate:   tm.DueDate,
 		Completed: tm.Completed,
+	}
+}
+
+func (u User) ToUserModel() UserModel {
+	objectID, err := primitive.ObjectIDFromHex(u.ID)
+	if err != nil {
+		objectID = primitive.NewObjectID()
+	}
+	return UserModel{
+		ID:       objectID,
+		Username: u.Username,
+		Email:    u.Email,
+		Password: u.Password,
 	}
 }

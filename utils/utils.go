@@ -44,3 +44,10 @@ func VerifyToken(tokenstring string) (jwt.MapClaims, error) {
 
 	return nil, fmt.Errorf("invalid token")
 }
+
+func ComparePassword(A string, B string) error {
+	if A == B {
+		return nil
+	}
+	return fmt.Errorf("passwords dont match")
+}
