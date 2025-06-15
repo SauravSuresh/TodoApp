@@ -107,3 +107,14 @@ func GetusernameFromID(userID primitive.ObjectID, r *http.Request) (string, erro
 	}
 	return userfromDB.Username, nil
 }
+
+func UserIDFromContext(r *http.Request) (primitive.ObjectID, error) {
+	switch v := r.Context().Value(common.UserIDKey).(type) {
+	case string: // raw hex string set by AuthenticationMiddleware
+		return primitive.ObjectIDFromHex(v)
+	case *common.UserModel: // already loaded by UserLoaderMiddleware
+		return v.ID, nil
+	default:
+		return primitive.NilObjectID, fmt.Errorf("unauthenticated")
+	}
+}

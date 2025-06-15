@@ -30,6 +30,7 @@ func TodoHandlers() chi.Router {
 		r.Post("/", handlers.CreateTodoHandler)
 		r.Put("/{id}", handlers.UpdateTodoHandler)
 		r.Delete("/{id}", handlers.DeleteTodoHandler)
+		r.Get("/mine", handlers.GetMyTodoHandler)
 
 	})
 	return router

@@ -87,13 +87,51 @@ func GetTodoHandler(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, td := range todoListFromDB {
-		todoList = append(todoList, td.ToTodo())
+		uname, _ := utils.GetusernameFromID(td.CreatedBy, r)
+		todoList = append(todoList, td.ToTodo(uname))
 	}
 	rnd.JSON(rw, http.StatusOK, common.GetTodoResponse{
 		Message: "All Todos retrieved",
 		Data:    todoList,
 	})
+}
 
+func GetMyTodoHandler(rw http.ResponseWriter, r *http.Request) {
+	var todoListFromDB = []common.TodoModel{}
+	uid, err := utils.UserIDFromContext(r)
+	if err != nil {
+		rnd.JSON(rw, http.StatusUnauthorized, renderer.M{"message": err.Error()})
+		return
+	}
+
+	filter := bson.M{"createdby": uid}
+
+	cursor, err := common.Db.Collection(common.GetTodoCollectionName()).Find(context.Background(), filter)
+	if err != nil {
+		log.Printf("failed to fetch todo records from db %v \n", err.Error())
+		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
+			"message": "Could not fetch the todo collection",
+			"error":   err.Error(),
+		})
+		return
+	}
+	todoList := []common.Todo{}
+	if err := cursor.All(context.Background(), &todoListFromDB); err != nil {
+		log.Printf("failed to extract from cursor %v \n", err.Error())
+		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
+			"message": "Could not extract from cursor",
+			"error":   err.Error(),
+		})
+	}
+
+	for _, td := range todoListFromDB {
+		uname, _ := utils.GetusernameFromID(td.CreatedBy, r)
+		todoList = append(todoList, td.ToTodo(uname))
+	}
+	rnd.JSON(rw, http.StatusOK, common.GetTodoResponse{
+		Message: "All Todos retrieved",
+		Data:    todoList,
+	})
 }
 
 func CreateTodoHandler(rw http.ResponseWriter, r *http.Request) {
@@ -106,6 +144,15 @@ func CreateTodoHandler(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	newTodoForDB := newTodoFromRequest.ToTodoModel()
+
+	uid, err := utils.UserIDFromContext(r)
+	if err != nil {
+		rnd.JSON(rw, http.StatusUnauthorized, renderer.M{"message": err.Error()})
+		return
+	}
+	newTodoForDB.CreatedBy = uid
+
+	newTodoForDB.CreatedAt = primitive.NewDateTimeFromTime(time.Now())
 
 	data, err := common.Db.Collection(common.GetTodoCollectionName()).InsertOne(r.Context(), newTodoForDB)
 	if err != nil {

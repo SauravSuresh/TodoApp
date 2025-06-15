@@ -5,6 +5,10 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+type contextKey string
+
+const UserIDKey contextKey = "user_id"
+
 const (
 	dbname          = "todo-database"
 	todo_collection = "todo"
@@ -32,6 +36,7 @@ type (
 		CreatedAt primitive.DateTime `bson:"string"`
 		DueDate   primitive.DateTime `bson:"duedate"`
 		Completed bool               `bson:"completed"`
+		CreatedBy primitive.ObjectID `json:"createdby`
 	}
 
 	Todo struct {
@@ -40,6 +45,7 @@ type (
 		CreatedAt primitive.DateTime `json:"string"`
 		DueDate   primitive.DateTime `json:"duedate"`
 		Completed bool               `json:"completed"`
+		CreatedBy string             `json:"username`
 	}
 
 	GetTodoResponse struct {
@@ -51,7 +57,7 @@ type (
 		ID       primitive.ObjectID `bson:"id"`
 		Username string             `bson:"username"`
 		Email    string             `bson:email`
-		Password string             `bson:"password";`
+		Password string             `bson:"password"`
 	}
 
 	User struct {
@@ -62,13 +68,13 @@ type (
 	}
 )
 
-func (tm TodoModel) ToTodo() Todo {
+func (tm TodoModel) ToTodo(username string) Todo {
 	return Todo{
 		ID:        tm.ID.Hex(),
 		Title:     tm.Title,
 		CreatedAt: tm.CreatedAt,
 		DueDate:   tm.DueDate,
-		Completed: tm.Completed,
+		CreatedBy: username,
 	}
 }
 

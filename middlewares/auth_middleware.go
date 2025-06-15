@@ -10,10 +10,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-type contextKey string
-
-const userIDKey contextKey = "user_id"
-
 func AuthenticationMiddelware(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -32,19 +28,19 @@ func AuthenticationMiddelware(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), userIDKey, claims["user_id"])
+		ctx := context.WithValue(r.Context(), common.UserIDKey, claims["user_id"])
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 func GetUserID(r *http.Request) (interface{}, bool) {
-	userID := r.Context().Value(userIDKey)
+	userID := r.Context().Value(common.UserIDKey)
 	return userID, userID != nil
 }
 
 func UserLoaderMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Context().Value(userIDKey)
+		userID := r.Context().Value(common.UserIDKey)
 		oidHex, ok := userID.(string)
 		if !ok {
 			http.Error(w, "unauthenticated", http.StatusUnauthorized)
@@ -60,7 +56,7 @@ func UserLoaderMiddleware(next http.Handler) http.Handler {
 			http.Error(w, "user not found", http.StatusUnauthorized)
 			return
 		}
-		ctx := context.WithValue(r.Context(), userIDKey, &u)
+		ctx := context.WithValue(r.Context(), common.UserIDKey, &u)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
