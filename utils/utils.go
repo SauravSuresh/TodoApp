@@ -3,9 +3,13 @@ package utils
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"time"
 
+	"github.com/SauravSuresh/todoapp/common"
 	"github.com/dgrijalva/jwt-go"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 var secretKey = []byte("secretpassword")
@@ -16,16 +20,17 @@ func CheckErr(err error, msg string) {
 	}
 }
 
-func GenerateToken(userID uint) (string, error) {
-	claims := jwt.MapClaims{}                            // Creates a claims object
-	claims["user_id"] = userID                           // adds to the claims map a user_id string to userID uint
-	claims["exp"] = time.Now().Add(time.Hour + 1).Unix() // adds to the claims map a exp token of 1 hr
+func GenerateToken(userID primitive.ObjectID) (string, error) {
+	claims := jwt.MapClaims{
+		"user_id": userID.Hex(),                     // store hex string
+		"exp":     time.Now().Add(time.Hour).Unix(), // +1 h
+	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims) // creates a new token with the claims created above
-	return token.SignedString(secretKey)                       // signs the token with the secret key
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(secretKey)
 }
-
 func VerifyToken(tokenstring string) (jwt.MapClaims, error) {
+	fmt.Println("entered verify")
 
 	token, err := jwt.Parse(tokenstring, func(token *jwt.Token) (interface{}, error) {
 		if token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
@@ -39,6 +44,7 @@ func VerifyToken(tokenstring string) (jwt.MapClaims, error) {
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		fmt.Println("claims are ok")
 		return claims, nil
 	}
 
@@ -50,4 +56,54 @@ func ComparePassword(A string, B string) error {
 		return nil
 	}
 	return fmt.Errorf("passwords dont match")
+}
+
+// TODO: hash passwords
+func MaybeAddUser(newuser common.UserModel, r *http.Request) (interface{}, error) {
+	start := time.Now()
+	fmt.Println(newuser.Email)
+	result := common.Db.Collection(common.GetUserCollectionName()).FindOne(r.Context(), bson.M{"email": newuser.Email})
+	log.Printf("find-one took %v (err=%v)", time.Since(start), result.Err())
+	if err := result.Err(); err == nil {
+		return nil, fmt.Errorf("user already exists")
+	}
+	data, err := common.Db.Collection(common.GetUserCollectionName()).InsertOne(r.Context(), newuser)
+	if err != nil {
+		return err, nil
+	}
+	return data.InsertedID, nil
+}
+
+func AddAuthCookie(tokenstring string) *http.Cookie {
+	return &http.Cookie{
+		Name:     "auth_token",
+		Value:    tokenstring,
+		Path:     "/",
+		Expires:  time.Now().Add(time.Hour),
+		HttpOnly: true,
+		Secure:   false, // change to true when served over HTTPS
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
+type contextKey string
+
+const userKey contextKey = "user"
+
+func GetUser(r *http.Request) (*common.UserModel, bool) {
+	usr, ok := r.Context().Value(userKey).(*common.UserModel)
+	return usr, ok
+}
+
+// todo a fucntion that gets the username from ID
+func GetusernameFromID(userID primitive.ObjectID, r *http.Request) (string, error) {
+	var userfromDB common.UserModel
+	result := common.Db.Collection((common.GetUserCollectionName())).FindOne(r.Context(), bson.M{"id": userID})
+	if err := result.Err(); err != nil {
+		return "", err
+	}
+	if err := result.Decode(&userfromDB); err != nil {
+		return "", err
+	}
+	return userfromDB.Username, nil
 }

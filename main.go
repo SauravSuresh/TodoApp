@@ -11,6 +11,7 @@ import (
 
 	"github.com/SauravSuresh/todoapp/common"
 	"github.com/SauravSuresh/todoapp/handlers"
+	"github.com/SauravSuresh/todoapp/middlewares"
 	"github.com/SauravSuresh/todoapp/utils"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
@@ -21,7 +22,8 @@ import (
 func TodoHandlers() chi.Router {
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
-	// router.Use(middlewares.AuthenticationMiddelware)
+	router.Use(middlewares.AuthenticationMiddelware)
+	router.Use(middlewares.UserLoaderMiddleware)
 	router.Group(func(r chi.Router) {
 		r.Get("/index", handlers.IndexHandler)
 		r.Get("/", handlers.GetTodoHandler)
@@ -39,7 +41,8 @@ func LoginHandlers() chi.Router {
 	router.Group(func(r chi.Router) {
 		r.Post("/register", handlers.RegisterUserHandler)
 		r.Get("/login", handlers.LoginPageHandler)
-		r.Post("/attemptLogin", handlers.LoginAttemptHandler)
+		r.Post("/login", handlers.LoginAttemptHandler)
+		r.Post("/logout", handlers.Logout)
 	})
 	return router
 }
@@ -52,6 +55,9 @@ func init() {
 	var err error
 	common.Client, err = mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
 	utils.CheckErr(err, "failed to connect to db")
+	if err != nil {
+		return
+	}
 
 	// Use the correct function to get the database name
 	common.Db = common.Client.Database(common.GetDbName())

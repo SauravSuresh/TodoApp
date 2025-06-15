@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Login</title>
+    <title>todoing – Login</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -67,48 +67,53 @@
     </style>
 </head>
 <body>
-    <form id="loginForm" class="login-container" method="POST" action="/auth/attemptLogin">
+    <form id="loginForm" class="login-container" method="POST" action="/auth/login">
         <h2>Login</h2>
         <input type="text" name="email" id="email" placeholder="Email" required />
         <input type="password" name="password" id="password" placeholder="Password" required />
         <input type="submit" value="Login" />
-        <p>Don't have an account? <a href="/register">Register</a></p>
+        <p>Don't have an account? <a href="/auth/register">Register</a></p>
     </form>
 
     <script>
-        document.getElementById("loginForm").addEventListener("submit", async function (e) {
-            e.preventDefault();
+      document.getElementById("loginForm").addEventListener("submit", async function (e) {
+        e.preventDefault();
 
-            const payload = {
-                email: document.getElementById("email").value,
-                password: document.getElementById("password").value,
-                username: ""
-            }
-            try {
-            const response = await fetch("/auth/attemptLogin", {
-                method: "POST",
-                headers: {
-                "Content-Type": "application/json"
-                },
-                body: JSON.stringify(payload)
-            });
-            let result;
-            try {
-                result = await response.json();
-            } catch {
-                result = { message: "No response body" };
-            }
+        const payload = {
+          email: document.getElementById("email").value,
+          password: document.getElementById("password").value
+        };
 
-            if (response.ok) {
-                alert(result.message || "logged in successfully");
-               window.location.href = "/todo/index";
-            } else {
-                alert("login failed: " + (result.message || "Unknown error"));
-            }
-            } catch (error) {
-            alert("Error logging in: " + error);
-            }
-        })
+        try {
+          const response = await fetch("/auth/login", {
+            method: "POST",
+            credentials: "include",          // include cookies
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          /* ----- handle 302/303 redirect issued by the server ----- */
+          if (response.redirected) {
+            window.location.href = response.url || "/todo/index";
+            return;
+          }
+
+          /* ----- otherwise treat body as JSON ----- */
+          let result = {};
+          try {
+            result = await response.json();
+          } catch { /* no body */ }
+
+          if (response.ok) {
+            alert(result.message || "Logged in successfully");
+            window.location.href = "/todo/index";
+          } else {
+            alert("Login failed: " + (result.message || "Unknown error"));
+          }
+        } catch (error) {
+          alert("Error logging in: " + error);
+        }
+      });
     </script>
 </body>
 </html>

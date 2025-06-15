@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Register</title>
+    <title>todoing – Register</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -25,6 +25,18 @@
         .register-container h2 {
             text-align: center;
             margin-bottom: 1.5rem;
+        }
+
+        .register-container .app-name {
+            margin-bottom: 0.5rem;
+            font-size: 1.8rem;
+            color: #007BFF;
+        }
+        .register-container h3 {
+            margin-top: 0;
+            margin-bottom: 1.2rem;
+            font-weight: normal;
+            color: #333;
         }
 
         .register-container input[type="text"],
@@ -70,12 +82,13 @@
 <body>
 </form>
     <form id="registerForm" class="register-container">
-        <h2>Register</h2>
+        <h2 class="app-name">todoing</h2>
+        <h3>Register</h3>
         <input type="text" id="username" placeholder="Username" required />
         <input type="email" id="email" placeholder="Email" required />
         <input type="password" id="password" placeholder="Password" required />
         <input type="submit" value="Create Account" />
-        <p>Already have an account? <a href="/">Login</a></p>
+        <p>Already have an account? <a href="/auth/login">Login</a></p>
     </form>
 
     <script>

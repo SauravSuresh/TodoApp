@@ -3,9 +3,11 @@ package middlewares
 import (
 	"context"
 	"net/http"
-	"strings"
 
+	"github.com/SauravSuresh/todoapp/common"
 	"github.com/SauravSuresh/todoapp/utils"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type contextKey string
@@ -13,17 +15,17 @@ type contextKey string
 const userIDKey contextKey = "user_id"
 
 func AuthenticationMiddelware(next http.Handler) http.Handler {
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tokenString := r.Header.Get("Authentication")
-		if tokenString == "" {
-			http.Error(w, "Missing Authentication token", http.StatusUnauthorized)
+		var tokenString string
+		var err error
+		if c, err := r.Cookie("auth_token"); err == nil {
+			tokenString = c.Value
 		}
-		tokenParts := strings.Split(tokenString, "")
-		if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
-			http.Error(w, "Invalid authentication token", http.StatusUnauthorized)
+		if err != nil {
+			http.Error(w, "no auth token found", http.StatusUnauthorized)
 			return
 		}
-		tokenString = tokenParts[1]
 		claims, err := utils.VerifyToken(tokenString)
 		if err != nil {
 			http.Error(w, "Invalid authentication token", http.StatusUnauthorized)
@@ -38,4 +40,27 @@ func AuthenticationMiddelware(next http.Handler) http.Handler {
 func GetUserID(r *http.Request) (interface{}, bool) {
 	userID := r.Context().Value(userIDKey)
 	return userID, userID != nil
+}
+
+func UserLoaderMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID := r.Context().Value(userIDKey)
+		oidHex, ok := userID.(string)
+		if !ok {
+			http.Error(w, "unauthenticated", http.StatusUnauthorized)
+			return
+		}
+		oid, err := primitive.ObjectIDFromHex(oidHex)
+		if err != nil {
+			http.Error(w, "invalid_user_id", http.StatusUnauthorized)
+		}
+		var u common.UserModel
+		err = common.Db.Collection(common.GetUserCollectionName()).FindOne(r.Context(), bson.M{"id": oid}).Decode(&u)
+		if err != nil {
+			http.Error(w, "user not found", http.StatusUnauthorized)
+			return
+		}
+		ctx := context.WithValue(r.Context(), userIDKey, &u)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }

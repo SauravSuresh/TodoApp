@@ -19,9 +19,68 @@
         />
     
         <link rel="stylesheet" type="text/css" href="/static/style.css" />
+        <style>
+          .top-bar{
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            padding:0.5rem 1rem;
+            background:#f8f9fa;
+            font-family:'Poppins',sans-serif;
+          }
+          .top-bar .app-name{font-weight:700;}
+          .top-bar .user-name{font-weight:400;}
+          /* ↓↓↓ NEW DROPDOWN STYLES ↓↓↓ */
+          .user-menu{
+            position:relative;
+          }
+          .user-menu button{
+            background:none;
+            border:none;
+            font:inherit;
+            cursor:pointer;
+            display:flex;
+            align-items:center;
+          }
+          .dropdown{
+            position:absolute;
+            right:0;
+            top:100%;
+            background:#fff;
+            border:1px solid #ccc;
+            box-shadow:0 2px 4px rgba(0,0,0,.1);
+            list-style:none;
+            margin:0;
+            padding:0;
+            min-width:120px;
+            z-index:1000;
+          }
+          .dropdown li a{
+            display:block;
+            padding:.5rem 1rem;
+            color:#333;
+            text-decoration:none;
+          }
+          .dropdown li a:hover{
+            background:#f0f0f0;
+          }
+          .hidden{display:none;}
+          /* ↑↑↑ END DROPDOWN STYLES ↑↑↑ */
+        </style>
       </head>
 
       <body>
+        <header class="top-bar">
+          <span class="app-name">todoing</span>
+          <div class="user-menu">
+            <button id="userBtn" class="user-name">
+              {{ .Username }} &#9662;
+            </button>
+            <ul id="userDropdown" class="dropdown hidden">
+              <li><a href="#" id="logoutLink">Logout</a></li>
+            </ul>
+          </div>
+        </header>
         <div class="container">
             <div id="new-todo">
                 <input type="text" placeholder="Tasks to be done"/>
@@ -131,6 +190,28 @@
             deleteTaskButton();
           }
           displayTodos();
+
+          /* ---------- user dropdown + logout ---------- */
+          const userBtn = document.getElementById("userBtn");
+          const userDropdown = document.getElementById("userDropdown");
+          const logoutLink = document.getElementById("logoutLink");
+
+          userBtn.addEventListener("click", () => {
+            userDropdown.classList.toggle("hidden");
+          });
+
+          // Close dropdown when clicking outside
+          document.addEventListener("click", (e) => {
+            if (!userBtn.contains(e.target) && !userDropdown.contains(e.target)) {
+              userDropdown.classList.add("hidden");
+            }
+          });
+
+          logoutLink.addEventListener("click", async (e) => {
+            e.preventDefault();
+            await fetch("/auth/logout", { method: "POST", credentials: "include" });
+            window.location.href = "/auth/login";
+          });
 
           submitButton.addEventListener("click", () => addTask());
         </script>

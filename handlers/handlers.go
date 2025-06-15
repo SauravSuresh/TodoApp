@@ -7,8 +7,10 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/SauravSuresh/todoapp/common"
+	"github.com/SauravSuresh/todoapp/middlewares"
 	"github.com/SauravSuresh/todoapp/utils"
 	"github.com/go-chi/chi/v5"
 	"github.com/thedevsaddam/renderer"
@@ -36,8 +38,30 @@ func HomeHandler(rw http.ResponseWriter, r *http.Request) {
 func IndexHandler(rw http.ResponseWriter, r *http.Request) {
 	// err := rnd.JSON(rw, http.StatusOK, "./readme.md")
 	// utils.CheckErr(err, "failed to send response from home handler")
-	err := rnd.HTML(rw, http.StatusOK, "indexPage", nil)
-	utils.CheckErr(err, "failed to send response from home handler")
+	raw, ok := middlewares.GetUserID(r)
+	if !ok {
+		rnd.JSON(rw, http.StatusUnauthorized, renderer.M{
+			"message": "not logged in",
+		})
+		return
+	}
+
+	user, ok := raw.(*common.UserModel)
+	if !ok {
+		// fallback: we only have the ID string
+		rnd.JSON(rw, http.StatusUnauthorized, renderer.M{
+			"message": "user not loaded",
+		})
+		return
+	}
+
+	data := renderer.M{
+		"Username": user.Username, // exported field
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	if err := rnd.HTML(rw, http.StatusOK, "indexPage", data); err != nil {
+		utils.CheckErr(err, "failed to send response from home handler")
+	}
 }
 
 func GetTodoHandler(rw http.ResponseWriter, r *http.Request) {
@@ -173,7 +197,6 @@ func DeleteTodoHandler(rw http.ResponseWriter, r *http.Request) {
 func RegisterUserHandler(rw http.ResponseWriter, r *http.Request) {
 	var newUserFromRequest common.User
 	if err := json.NewDecoder(r.Body).Decode(&newUserFromRequest); err != nil {
-		fmt.Println("OOMBI")
 		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
 			"message": "Failed to decode JSON",
 			"error":   err,
@@ -181,17 +204,37 @@ func RegisterUserHandler(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	newUsertoDb := newUserFromRequest.ToUserModel()
-	data, err := common.Db.Collection(common.GetUserCollectionName()).InsertOne(r.Context(), newUsertoDb)
+	id, err := utils.MaybeAddUser(newUsertoDb, r)
 	if err != nil {
+		if err.Error() == "user already exists" {
+			rnd.JSON(rw, http.StatusConflict, renderer.M{ // 409
+				"message": err.Error(),
+			})
+		} else {
+			rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
+				"message": "DB error",
+				"error":   err.Error(),
+			})
+		}
+		return
+	}
+
+	//TODO move to env variable
+	tokenstring, tokenerr := utils.GenerateToken(newUsertoDb.ID)
+	if tokenerr != nil {
 		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
-			"message": "Failed to add user to db",
-			"error":   err,
+			"message": "failed to generate token",
+			"err":     err.Error(),
 		})
 		return
 	}
+	// Set JWT as secure, HTTP‑only cookie
+
+	http.SetCookie(rw, utils.AddAuthCookie(tokenstring))
+
 	rnd.JSON(rw, http.StatusOK, renderer.M{
 		"message": "user created successfully",
-		"ID":      data.InsertedID,
+		"ID":      id,
 	})
 
 }
@@ -201,6 +244,24 @@ func LoginPageHandler(rw http.ResponseWriter, r *http.Request) {
 	// utils.CheckErr(err, "failed to send response from home handler")
 	err := rnd.HTML(rw, http.StatusOK, "loginPage", nil)
 	utils.CheckErr(err, "failed to send response from home handler")
+}
+
+func Logout(rw http.ResponseWriter, r *http.Request) {
+
+	expired := &http.Cookie{
+		Name:     "auth_token",
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0), // already in the past
+		MaxAge:   -1,              // force removal in all browsers
+		HttpOnly: true,
+		Secure:   false, // flip to true when you serve over HTTPS
+		SameSite: http.SameSiteLaxMode,
+	}
+	http.SetCookie(rw, expired)
+
+	http.Redirect(rw, r, "/auth/login", http.StatusSeeOther)
+	return
 }
 
 func LoginAttemptHandler(rw http.ResponseWriter, r *http.Request) {
@@ -241,8 +302,17 @@ func LoginAttemptHandler(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rnd.JSON(rw, http.StatusOK, renderer.M{
-		"message": "Login successful",
-		"ID":      userFromDB.ID,
-	})
+	tokenstring, tokenerr := utils.GenerateToken(userFromDB.ID)
+	if tokenerr != nil {
+		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
+			"message": "failed to generate token",
+			"err":     err.Error(),
+		})
+		return
+	}
+	// Set JWT as secure, HTTP‑only cookie
+
+	http.SetCookie(rw, utils.AddAuthCookie(tokenstring))
+	http.Redirect(rw, r, "/todo/index", http.StatusSeeOther)
+	return
 }
