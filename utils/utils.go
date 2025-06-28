@@ -30,7 +30,6 @@ func GenerateToken(userID primitive.ObjectID) (string, error) {
 	return token.SignedString(secretKey)
 }
 func VerifyToken(tokenstring string) (jwt.MapClaims, error) {
-	fmt.Println("entered verify")
 
 	token, err := jwt.Parse(tokenstring, func(token *jwt.Token) (interface{}, error) {
 		if token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
@@ -44,7 +43,6 @@ func VerifyToken(tokenstring string) (jwt.MapClaims, error) {
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		fmt.Println("claims are ok")
 		return claims, nil
 	}
 

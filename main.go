@@ -30,8 +30,9 @@ func TodoHandlers() chi.Router {
 		r.Post("/", handlers.CreateTodoHandler)
 		r.Put("/{id}", handlers.UpdateTodoHandler)
 		r.Delete("/{id}", handlers.DeleteTodoHandler)
-		r.Get("/mine", handlers.GetMyTodoHandler)
-
+		r.Get("/createdbyme", handlers.GetCreatedTodoHandler)
+		r.Get("/assignedtome", handlers.GetAssignedTodoHandler)
+		r.Post("/setstatus/{id}", handlers.SetStatusHandler)
 	})
 	return router
 }
@@ -41,9 +42,11 @@ func LoginHandlers() chi.Router {
 	router.Use(middleware.Logger)
 	router.Group(func(r chi.Router) {
 		r.Post("/register", handlers.RegisterUserHandler)
+		r.Get("/register", handlers.HomeHandler)
 		r.Get("/login", handlers.LoginPageHandler)
 		r.Post("/login", handlers.LoginAttemptHandler)
 		r.Post("/logout", handlers.Logout)
+		r.Get("/users", handlers.GetAvaialableUsers)
 	})
 	return router
 }

@@ -31,26 +31,41 @@ var Db *mongo.Database
 
 type (
 	TodoModel struct {
-		ID        primitive.ObjectID `bson:"_id,omitempty"`
-		Title     string             `bson:"title"`
-		CreatedAt primitive.DateTime `bson:"string"`
-		DueDate   primitive.DateTime `bson:"duedate"`
-		Completed bool               `bson:"completed"`
-		CreatedBy primitive.ObjectID `json:"createdby`
+		ID         primitive.ObjectID `bson:"_id,omitempty"`
+		Title      string             `bson:"title"`
+		CreatedAt  primitive.DateTime `bson:"string"`
+		DueDate    primitive.DateTime `bson:"duedate"`
+		Completed  bool               `bson:"completed"`
+		CreatedBy  primitive.ObjectID `bson:"createdby"`
+		AssignedTo primitive.ObjectID `bson:"assignedto"`
+	}
+
+	CreateTodoRequest struct {
+		Title      string `json:"title"`
+		DueDateMs  int64  `json:"duedate"`    // epoch-milliseconds number
+		AssignedTo string `json:"assignedto"` // hex user ID
+	}
+
+	SetStatusRequest struct {
+		Id     string
+		Update bool `json:"update"`
 	}
 
 	Todo struct {
-		ID        string             `json:"id,omitempty"`
-		Title     string             `json:"title"`
-		CreatedAt primitive.DateTime `json:"string"`
-		DueDate   primitive.DateTime `json:"duedate"`
-		Completed bool               `json:"completed"`
-		CreatedBy string             `json:"username`
+		ID            string             `json:"id,omitempty"`
+		Title         string             `json:"title"`
+		CreatedAt     primitive.DateTime `json:"createdat"`
+		DueDate       primitive.DateTime `json:"duedate"`
+		Completed     bool               `json:"completed"`
+		CreatedBy     string             `json:"createdby"`
+		AssignedTo    string             `json:"assignedto"`
+		CreatedByHex  string             `json:"createdbyhex"`
+		AssignedToHex string             `json:"assignedtohex"`
 	}
 
-	GetTodoResponse struct {
-		Message string `json:"message"`
-		Data    []Todo `json:"data"`
+	GetObjectResponse struct {
+		Message string      `json:"message"`
+		Data    interface{} `json:"data"`
 	}
 
 	UserModel struct {
@@ -68,13 +83,15 @@ type (
 	}
 )
 
-func (tm TodoModel) ToTodo(username string) Todo {
+func (tm TodoModel) ToTodo(createdByUsername string, assignedToUsername string) Todo {
 	return Todo{
-		ID:        tm.ID.Hex(),
-		Title:     tm.Title,
-		CreatedAt: tm.CreatedAt,
-		DueDate:   tm.DueDate,
-		CreatedBy: username,
+		ID:         tm.ID.Hex(),
+		Title:      tm.Title,
+		CreatedAt:  tm.CreatedAt,
+		DueDate:    tm.DueDate,
+		Completed:  tm.Completed,
+		CreatedBy:  createdByUsername,
+		AssignedTo: assignedToUsername,
 	}
 }
 
@@ -83,12 +100,17 @@ func (tm Todo) ToTodoModel() TodoModel {
 	if err != nil {
 		objectID = primitive.NewObjectID()
 	}
+	assignedObjectID, assingerr := primitive.ObjectIDFromHex(tm.AssignedTo)
+	if assingerr != nil {
+		objectID = primitive.ObjectID{}
+	}
 	return TodoModel{
-		ID:        objectID,
-		Title:     tm.Title,
-		CreatedAt: tm.CreatedAt,
-		DueDate:   tm.DueDate,
-		Completed: tm.Completed,
+		ID:         objectID,
+		Title:      tm.Title,
+		CreatedAt:  tm.CreatedAt,
+		DueDate:    tm.DueDate,
+		Completed:  tm.Completed,
+		AssignedTo: assignedObjectID,
 	}
 }
 
@@ -102,5 +124,13 @@ func (u User) ToUserModel() UserModel {
 		Username: u.Username,
 		Email:    u.Email,
 		Password: u.Password,
+	}
+}
+
+func (u UserModel) ToUser() User {
+	return User{
+		ID:       u.ID.Hex(),
+		Username: u.Username,
+		Email:    u.Email,
 	}
 }

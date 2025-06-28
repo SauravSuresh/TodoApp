@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -87,16 +89,18 @@ func GetTodoHandler(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, td := range todoListFromDB {
-		uname, _ := utils.GetusernameFromID(td.CreatedBy, r)
-		todoList = append(todoList, td.ToTodo(uname))
+		createdbyname, _ := utils.GetusernameFromID(td.CreatedBy, r)
+		assignbyname, _ := utils.GetusernameFromID(td.AssignedTo, r)
+		fmt.Printf("assigned %s", assignbyname)
+		todoList = append(todoList, td.ToTodo(createdbyname, assignbyname))
 	}
-	rnd.JSON(rw, http.StatusOK, common.GetTodoResponse{
+	rnd.JSON(rw, http.StatusOK, common.GetObjectResponse{
 		Message: "All Todos retrieved",
 		Data:    todoList,
 	})
 }
 
-func GetMyTodoHandler(rw http.ResponseWriter, r *http.Request) {
+func GetCreatedTodoHandler(rw http.ResponseWriter, r *http.Request) {
 	var todoListFromDB = []common.TodoModel{}
 	uid, err := utils.UserIDFromContext(r)
 	if err != nil {
@@ -117,7 +121,7 @@ func GetMyTodoHandler(rw http.ResponseWriter, r *http.Request) {
 	}
 	todoList := []common.Todo{}
 	if err := cursor.All(context.Background(), &todoListFromDB); err != nil {
-		log.Printf("failed to extract from cursor %v \n", err.Error())
+		log.Printf("failed to extract todos from cursor %v \n", err.Error())
 		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
 			"message": "Could not extract from cursor",
 			"error":   err.Error(),
@@ -125,36 +129,141 @@ func GetMyTodoHandler(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, td := range todoListFromDB {
-		uname, _ := utils.GetusernameFromID(td.CreatedBy, r)
-		todoList = append(todoList, td.ToTodo(uname))
+		createdbyname, _ := utils.GetusernameFromID(td.CreatedBy, r)
+		assignbyname, _ := utils.GetusernameFromID(td.AssignedTo, r)
+		fmt.Printf("assigned %s", assignbyname)
+		todoList = append(todoList, td.ToTodo(createdbyname, assignbyname))
 	}
-	rnd.JSON(rw, http.StatusOK, common.GetTodoResponse{
+	rnd.JSON(rw, http.StatusOK, common.GetObjectResponse{
 		Message: "All Todos retrieved",
 		Data:    todoList,
 	})
 }
 
-func CreateTodoHandler(rw http.ResponseWriter, r *http.Request) {
-	var newTodoFromRequest common.Todo
-	if err := json.NewDecoder(r.Body).Decode(&newTodoFromRequest); err != nil {
-		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
-			"message": "Failed to decode JSON",
-			"error":   err,
-		})
-		return
-	}
-	newTodoForDB := newTodoFromRequest.ToTodoModel()
-
+func GetAssignedTodoHandler(rw http.ResponseWriter, r *http.Request) {
+	var todoListFromDB = []common.TodoModel{}
 	uid, err := utils.UserIDFromContext(r)
 	if err != nil {
 		rnd.JSON(rw, http.StatusUnauthorized, renderer.M{"message": err.Error()})
 		return
 	}
-	newTodoForDB.CreatedBy = uid
 
-	newTodoForDB.CreatedAt = primitive.NewDateTimeFromTime(time.Now())
+	filter := bson.M{"assignedto": uid}
 
-	data, err := common.Db.Collection(common.GetTodoCollectionName()).InsertOne(r.Context(), newTodoForDB)
+	cursor, err := common.Db.Collection(common.GetTodoCollectionName()).Find(context.Background(), filter)
+	if err != nil {
+		log.Printf("failed to fetch todo records from db %v \n", err.Error())
+		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
+			"message": "Could not fetch the todo collection",
+			"error":   err.Error(),
+		})
+		return
+	}
+	todoList := []common.Todo{}
+	if err := cursor.All(context.Background(), &todoListFromDB); err != nil {
+		log.Printf("failed to extract todos from cursor %v \n", err.Error())
+		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
+			"message": "Could not extract from cursor",
+			"error":   err.Error(),
+		})
+	}
+
+	for _, td := range todoListFromDB {
+		createdbyname, _ := utils.GetusernameFromID(td.CreatedBy, r)
+		assignbyname, _ := utils.GetusernameFromID(td.AssignedTo, r)
+		fmt.Printf("assigned %s", assignbyname)
+		todoList = append(todoList, td.ToTodo(createdbyname, assignbyname))
+	}
+	rnd.JSON(rw, http.StatusOK, common.GetObjectResponse{
+		Message: "All Todos retrieved",
+		Data:    todoList,
+	})
+}
+
+func GetAvaialableUsers(rw http.ResponseWriter, r *http.Request) {
+	var UserListFromDB []common.UserModel
+	filter := bson.M{}
+	cursor, err := common.Db.Collection(common.GetUserCollectionName()).Find(context.Background(), filter)
+	if err != nil {
+		log.Printf("Failed to get users from db")
+		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
+			"message": "Could not fetch users",
+			"error":   err.Error(),
+		})
+		return
+	}
+	userList := []common.User{}
+	if err := cursor.All(context.Background(), &UserListFromDB); err != nil {
+		log.Printf("failed to extract from cursor %v \n", err.Error())
+		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
+			"message": "Could not extract users from cursor",
+			"error":   err.Error(),
+		})
+	}
+	for _, td := range UserListFromDB {
+		userList = append(userList, td.ToUser())
+	}
+	rnd.JSON(rw, http.StatusOK, common.GetObjectResponse{
+		Message: "All Users retrieved",
+		Data:    userList,
+	})
+}
+
+func CreateTodoHandler(rw http.ResponseWriter, r *http.Request) {
+
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		fmt.Printf("could not read body: %v\n", err)
+		// you can bail out or just continue
+	} else {
+		fmt.Printf("RAW JSON >>> %s\n", string(bodyBytes))
+
+		// Try unmarshalling into a generic map to inspect field types
+		var dbg map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &dbg); err == nil {
+			for k, v := range dbg {
+				fmt.Printf("field %-10s : %T (%v)\n", k, v, v)
+			}
+		} else {
+			fmt.Printf("json.Unmarshal error: %v\n", err)
+		}
+
+		// Reset r.Body so the real decoder can read it again
+		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	}
+
+	var req common.CreateTodoRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		rnd.JSON(rw, http.StatusBadRequest, renderer.M{
+			"message": "Failed to decode JSON",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	dueDT := primitive.DateTime(req.DueDateMs)
+
+	uidHex, err := utils.UserIDFromContext(r)
+	if err != nil {
+		rnd.JSON(rw, http.StatusUnauthorized, renderer.M{"message": err.Error()})
+		return
+	}
+
+	todo := common.Todo{
+		Title:      req.Title,
+		DueDate:    dueDT,
+		AssignedTo: req.AssignedTo,
+	}
+
+	model := todo.ToTodoModel()
+	if err != nil {
+		rnd.JSON(rw, http.StatusBadRequest, renderer.M{"message": err.Error()})
+		return
+	}
+
+	model.CreatedAt = primitive.NewDateTimeFromTime(time.Now())
+	model.CreatedBy = uidHex
+	data, err := common.Db.Collection(common.GetTodoCollectionName()).InsertOne(r.Context(), model)
 	if err != nil {
 		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
 			"message": "Failed to add todo to db",
@@ -362,4 +471,51 @@ func LoginAttemptHandler(rw http.ResponseWriter, r *http.Request) {
 	http.SetCookie(rw, utils.AddAuthCookie(tokenstring))
 	http.Redirect(rw, r, "/todo/index", http.StatusSeeOther)
 	return
+}
+
+func SetStatusHandler(rw http.ResponseWriter, r *http.Request) {
+
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+
+	var updatereq common.SetStatusRequest
+	res, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		log.Printf("the id param is not a valid hex value: %v\n", err.Error())
+		rnd.JSON(rw, http.StatusBadRequest, renderer.M{
+			"message": "The id is invalid",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&updatereq); err != nil {
+		rnd.JSON(rw, http.StatusBadRequest, renderer.M{
+			"message": "Failed to decode JSON",
+			"error":   err.Error(),
+		})
+		return
+	}
+	fmt.Printf("update from post is %v", updatereq.Update)
+
+	filter := bson.M{"_id": res}
+	update := bson.M{"$set": bson.M{
+		"completed": updatereq.Update,
+	}}
+	// DEBUG: confirm we got the right ObjectID
+	fmt.Printf("SetStatusHandler — resolved ObjectID: %s\n", res.Hex())
+
+	data, err := common.Db.Collection(common.GetTodoCollectionName()).UpdateOne(r.Context(), filter, update)
+	if err != nil {
+		log.Printf("failed to update db collection: %v\n", err.Error())
+		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
+			"message": "Failed to update data in the database",
+			"error":   err.Error(),
+		})
+		return
+	}
+	rnd.JSON(rw, http.StatusOK, renderer.M{
+		"message": "Todo updated successfully",
+		"data":    data.ModifiedCount,
+	})
+
 }

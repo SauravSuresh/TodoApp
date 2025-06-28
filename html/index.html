@@ -2,272 +2,484 @@
 <!DOCTYPE html>
 
 <html lang="en">
-    <head>
-        <meta charset="UTF-8"/>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>To Do App </title>
-        <link rel="preconnect" href="https://fonts.googleapis.com"/>
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap"
-          rel="stylesheet"
-        />
-        <link rel="stylesheet" type="text/css" href="/static/style.css" />
-        <link
-          rel="stylesheet"
-          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css"
-        />
-    
-        <link rel="stylesheet" type="text/css" href="/static/style.css" />
-        <style>
-          .task-user{
-            font-size:0.8rem;
-            color:#555;
-            margin-left:0.5rem;
-          }
-          .top-bar{
-            display:flex;
-            justify-content:space-between;
-            align-items:center;
-            padding:0.5rem 1rem;
-            background:#f8f9fa;
-            font-family:'Poppins',sans-serif;
-          }
-          .top-bar .app-name{font-weight:700;}
-          .top-bar .user-name{font-weight:400;}
-          /* ↓↓↓ NEW DROPDOWN STYLES ↓↓↓ */
-          .user-menu{
-            position:relative;
-          }
-          .user-menu button{
-            background:none;
-            border:none;
-            font:inherit;
-            cursor:pointer;
-            display:flex;
-            align-items:center;
-          }
-          .dropdown{
-            position:absolute;
-            right:0;
-            top:100%;
-            background:#fff;
-            border:1px solid #ccc;
-            box-shadow:0 2px 4px rgba(0,0,0,.1);
-            list-style:none;
-            margin:0;
-            padding:0;
-            min-width:120px;
-            z-index:1000;
-          }
-          .dropdown li a{
-            display:block;
-            padding:.5rem 1rem;
-            color:#333;
-            text-decoration:none;
-          }
-          .dropdown li a:hover{
-            background:#f0f0f0;
-          }
-          .hidden{display:none;}
-          /* ↑↑↑ END DROPDOWN STYLES ↑↑↑ */
-          .view-toggle{
-            margin-bottom:1rem;
-            text-align:center;
-          }
-          .toggle-btn{
-            background:#e9ecef;
-            border:1px solid #ced4da;
-            padding:0.4rem 1rem;
-            margin:0 0.25rem;
-            border-radius:4px;
-            cursor:pointer;
-            font-family:'Poppins',sans-serif;
-          }
-          .toggle-btn.active{
-            background:#007bff;
-            color:#fff;
-            border-color:#007bff;
-          }
-        </style>
-      </head>
 
-      <body>
-        <header class="top-bar">
-          <span class="app-name">todoing</span>
-          <div class="user-menu">
-            <button id="userBtn" class="user-name">
-              {{ .Username }} &#9662;
-            </button>
-            <ul id="userDropdown" class="dropdown hidden">
-              <li><a href="#" id="logoutLink">Logout</a></li>
-            </ul>
-          </div>
-        </header>
-        <div class="container">
-          <div class="view-toggle">
-            <button id="btnAll" class="toggle-btn active">All Tasks</button>
-            <button id="btnMine" class="toggle-btn">My Tasks</button>
-          </div>
-            <div id="new-todo">
-                <input type="text" placeholder="Tasks to be done"/>
-                <button id="submit">Add</button>
-            </div>
-            <div id="todos">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>To Do App </title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" type="text/css" href="/static/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css" />
 
-            </div>
-        </div>
-        <script>
-          const localhostAddress = "http://localhost:9000/todo";
-          let currentEndpoint = "/todo/";          // default: all tasks
-          const newTodoInput = document.querySelector("#new-todo input");
-          let submitButton = document.querySelector("#submit");
-          let deleteButtonm = document.querySelector(`.delete`)
+  <link rel="stylesheet" type="text/css" href="/static/style.css" />
+  <style>
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .animate-entry {
+      animation: fadeSlide 0.35s ease-out;
+    }
+    .todo {
+      display: grid;
+      /* grid areas: chk | title | due | actions (row‑1)
+                     chk | meta  | meta| actions (row‑2) */
+      grid-template-areas:
+        "chk title due act"
+        "chk meta  meta act";
+      grid-template-columns: auto 1fr minmax(120px,auto) auto;
+      grid-template-rows: auto auto;
+      column-gap: 0.6rem;
+      row-gap: 0.2rem;
+      padding: 0.55rem 0.8rem 0.5rem;
+      border-bottom: 1px solid #e4e4e4;
+      align-items: center;
+    }
+    .todo-checkbox { grid-area: chk; margin-right: 2px; transform: scale(1.2); cursor:pointer; }
+    .todo-title    { grid-area: title; word-break: break-word; }
+    .due-date      { grid-area: due; text-align: right; }
+    .actions       { grid-area: act; display:flex; gap:0.25rem; }
+    .created-by    { grid-area: meta; font-size:0.55rem; color:#777;
+                     display:block; margin-top:2px; }
+    .due-date{
+      font-size:0.8rem;
+      font-weight:600;
+      margin-left:0.75rem;
+    }
+    .due-overdue  { color:#dc3545; }  /* red */
+    .due-today    { color:#ff5722; }  /* orange‑red */
+    .due-soon     { color:#ffc107; }  /* amber */
+    .due-later    { color:#28a745; }  /* green */
 
-          async function getTodos() {
-            try{
-              const response = await fetch(`http://localhost:9000${currentEndpoint}`, {
-                credentials:"include"
-              });
-              const responseData = await response.json();
-              console.log("Fetched todos array:", responseData.data);
-              return responseData.data || [];
-            }catch(error){
-              console.error("Error:",error)
-              return [];
-            }
+    .completed {
+      opacity: 0.55;
+      text-decoration: line-through;
+    }
+    .todo-checkbox {
+      margin-right: 0.5rem;
+      transform: scale(1.2);
+      cursor: pointer;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 1rem;
+      background: #f8f9fa;
+      font-family: 'Poppins', sans-serif;
+    }
+
+    .top-bar .app-name {
+      font-weight: 700;
+    }
+
+    .top-bar .user-name {
+      font-weight: 400;
+    }
+
+    /* ↓↓↓ NEW DROPDOWN STYLES ↓↓↓ */
+    .user-menu {
+      position: relative;
+    }
+
+    .user-menu button {
+      background: none;
+      border: none;
+      font: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+    }
+
+    .dropdown {
+      position: absolute;
+      right: 0;
+      top: 100%;
+      background: #fff;
+      border: 1px solid #ccc;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, .1);
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      min-width: 120px;
+      z-index: 1000;
+    }
+
+    .dropdown li a {
+      display: block;
+      padding: .5rem 1rem;
+      color: #333;
+      text-decoration: none;
+    }
+
+    .dropdown li a:hover {
+      background: #f0f0f0;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    /* ↑↑↑ END DROPDOWN STYLES ↑↑↑ */
+    .view-toggle {
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+
+    .toggle-btn {
+      background: #e9ecef;
+      border: 1px solid #ced4da;
+      padding: 0.4rem 1rem;
+      margin: 0 0.25rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: 'Poppins', sans-serif;
+    }
+
+    .toggle-btn.active {
+      background: #007bff;
+      color: #fff;
+      border-color: #007bff;
+    }
+
+    /* Floating “Add Task” panel */
+    #new-todo {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 0.4rem;
+      background: #ffffff;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      z-index: 100; /* keep above list */
+      width: clamp(280px, 90%, 650px);
+    }
+    #new-todo input[type="text"],
+    #new-todo input[type="date"],
+    #new-todo select {
+      flex: 1 1 auto;
+    }
+    #submit {
+      white-space: nowrap;
+    }
+
+    .container {
+      padding-bottom: 120px; /* space for floating panel */
+    }
+  </style>
+</head>
+
+<body>
+  <header class="top-bar">
+    <span class="app-name">todoing</span>
+    <div class="user-menu">
+      <button id="userBtn" class="user-name">
+        {{ .Username }} &#9662;
+      </button>
+      <ul id="userDropdown" class="dropdown hidden">
+        <li><a href="#" id="logoutLink">Logout</a></li>
+      </ul>
+    </div>
+  </header>
+  <div class="container">
+    <div class="view-toggle">
+      <button id="btnAll" class="toggle-btn active">All Tasks</button>
+      <button id="btnMine" class="toggle-btn">Created Tasks</button>
+      <button id="btnAssigned" class="toggle-btn">Assigned To Me</button>
+    </div>
+    <div id="new-todo">
+      <input id="titleInput" type="text" placeholder="Task title" />
+      <input id="dueDateInput" type="date" />
+      <select id="assignedToSelect">
+        <option value="">-- assign to --</option>
+      </select>
+      <button id="submit">Add</button>
+    </div>
+    <div id="todos">
+
+    </div>
+  </div>
+  <script>
+    const localhostAddress = "http://localhost:9000/todo";
+    let currentEndpoint = "/todo/";          // default: all tasks
+    const loggedUsername = "{{ .Username }}";  // injected by template
+    let currentUserId = "";  // will capture my user ID once users load
+    const titleInput = document.getElementById("titleInput");
+    const dueDateInput = document.getElementById("dueDateInput");
+    const assignedToSelect = document.getElementById("assignedToSelect");
+    let submitButton = document.getElementById("submit");
+
+    const renderedIds = new Set();   // track which todos have been displayed
+
+    async function loadUsers() {
+      try {
+        const res = await fetch("http://localhost:9000/auth/users", { credentials: "include" });
+        const payload = await res.json();
+        console.log("Users payload:", payload);   // 💡 debug aid
+
+        // Try a few common shapes the backend might return
+        let users = null;
+        if (Array.isArray(payload)) users = payload;
+        else if (Array.isArray(payload.data)) users = payload.data;
+        else if (Array.isArray(payload.users)) users = payload.users;
+        else if (Array.isArray(payload.result)) users = payload.result;
+
+        if (!users) {
+          console.error("Unexpected users response shape:", payload);
+          return;
+        }
+
+        users.forEach(u => {
+          const opt = document.createElement("option");
+          opt.value = u.id || u.ID || u._id || "";                     // tolerate various id keys
+          opt.text = u.username || u.Username || u.email || "user";   // tolerate various name keys
+          if (!currentUserId && opt.text === loggedUsername) {
+            currentUserId = opt.value;
           }
+          assignedToSelect.appendChild(opt);
+        });
+      } catch (err) {
+        console.error("Could not load users:", err);
+      }
+    }
 
-          async function CreateTodo(data){
-            try{
-              const response = await fetch(`${localhostAddress}`, {
-                method:"POST",
-                headers:{
-                  "Content-Type":"application/json",
-                },
-                body:JSON.stringify(data),
-              })
-              const result = await response.json();
-              console.log("success",result.message);
-            }catch (error){
-              console.error("Error:",error);
-              return [];
-            }
-          }
+    async function getTodos() {
+      try {
+        const response = await fetch(`http://localhost:9000${currentEndpoint}`, {
+          credentials: "include"
+        });
+        const responseData = await response.json();
+        console.log("Fetched todos array:", responseData.data);
+        return responseData.data || [];
+      } catch (error) {
+        console.error("Error:", error)
+        return [];
+      }
+    }
 
-          async function DeleteTodo(TodoID){
-            console.log("Entering DeleteTodo with ID:", TodoID);
-            try{
-              const response = await fetch(`${localhostAddress}/${TodoID}`,{
-                method:"DELETE",
-              });
-              console.log("Delete response status:", response.status);
-              const rawDeleteText = await response.text();
-              console.log("Raw delete response:", rawDeleteText);
-              const result = JSON.parse(rawDeleteText);
-              console.log("Success:", result.message)
-            }catch(error){
-              console.error("error:",error)
-            }
-          }
+    async function CreateTodo(data) {
+      try {
+        // 🐞 debug: show what we're sending
+        console.log("POST payload:", JSON.stringify(data));
 
-          function deleteTaskButton(){
-            const deleteTodoButtons = document.querySelectorAll(".delete")
-            for (const deleteButton of deleteTodoButtons){
-              deleteButton.onclick = async function () {
-            const todoID = deleteButton.getAttribute("data-id");
-            console.log("Delete button clicked for ID:", todoID);
-            await DeleteTodo(todoID);
-            displayTodos();
-};
-            }
-          }
+        const response = await fetch(`${localhostAddress}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(data),
+        })
+        const result = await response.json();
+        console.log("success", result.message);
+      } catch (error) {
+        console.error("Error:", error);
+        return [];
+      }
+    }
 
-          async function addTask() {
-            const data = { title: newTodoInput.value };
-            await CreateTodo(data);
-            displayTodos();
-            newTodoInput.value="";
-          }
+    async function DeleteTodo(TodoID) {
+      console.log("Entering DeleteTodo with ID:", TodoID);
+      try {
+        const response = await fetch(`${localhostAddress}/${TodoID}`, {
+          method: "DELETE",
+        });
+        console.log("Delete response status:", response.status);
+        const rawDeleteText = await response.text();
+        console.log("Raw delete response:", rawDeleteText);
+        const result = JSON.parse(rawDeleteText);
+        console.log("Success:", result.message)
+      } catch (error) {
+        console.error("error:", error)
+      }
+    }
 
-          async function displayTodos() {
-            const todolist = await getTodos();
-            let todoContainerList = document.querySelector("#todos");
-            todoContainerList.innerHTML = "";
-            if (todolist.length==0){
-              todoContainerList.innerHTML +=`
-              <div class="todo">
-                <span>You do not have any todos</span>
-              </div>
-                `;
-            }else{
-              todolist.forEach((todo) => {
-                todoContainerList.innerHTML+=`
-                  <div class ="todo">
-                    <span>${todo.title}</span>
-                    <span class="task-user">${todo.CreatedBy ? "— " + todo.CreatedBy : ""}</span>
-                    <div class="actions">
-                      <button class = "edit">
-                        <i class="fas fa-edit"></i>
-                        </button>
-                       <button data-id=${todo.id} class="delete">
-                <i class="far fa-trash-alt"></i>
-                </button>
-                      </div>
-                    </div>
-                `;
-              });
-            }
-            deleteTaskButton();
-          }
+    async function SetTodoStatus(id, isDone) {
+      try {
+        await fetch(`/todo/setstatus/${id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ update: isDone })
+        });
+      } catch (err) {
+        console.error("Failed to update status:", err);
+      }
+    }
+
+    function deleteTaskButton() {
+      const deleteTodoButtons = document.querySelectorAll(".delete")
+      for (const deleteButton of deleteTodoButtons) {
+        deleteButton.onclick = async function () {
+          const todoID = deleteButton.getAttribute("data-id");
+          console.log("Delete button clicked for ID:", todoID);
+          await DeleteTodo(todoID);
           displayTodos();
+        };
+      }
+    }
 
-          /* ---------- user dropdown + logout ---------- */
-          const userBtn = document.getElementById("userBtn");
-          const userDropdown = document.getElementById("userDropdown");
-          const logoutLink = document.getElementById("logoutLink");
+    async function addTask() {
+      const dueMs = new Date(dueDateInput.value).getTime();   // epoch-ms
 
-          // ----- view toggle buttons -----
-          const btnAll = document.getElementById("btnAll");
-          const btnMine = document.getElementById("btnMine");
+      const assignedId = assignedToSelect.value || currentUserId;
 
-          function setActive(button){
-            btnAll.classList.remove("active");
-            btnMine.classList.remove("active");
-            button.classList.add("active");
-          }
+      const data = {
+        title: titleInput.value.trim(),
+        duedate: dueMs,
+        assignedto: assignedId
+      };
 
-          btnAll.addEventListener("click", () => {
-            currentEndpoint = "/todo/";
-            setActive(btnAll);
-            displayTodos();
-          });
+      await CreateTodo(data);
+      displayTodos()
+      // reset inputs
+      titleInput.value = "";
+      dueDateInput.value = "";
+      assignedToSelect.value = "";
+    }
 
-          btnMine.addEventListener("click", () => {
-            currentEndpoint = "/todo/mine";
-            setActive(btnMine);
-            displayTodos();
-          });
+    async function displayTodos() {
+      const rawList = await getTodos();
+      // separate pending vs completed
+      const pending = [];
+      const doneArr = [];
+      rawList.forEach(t => (t.completed ? doneArr : pending).push(t));
+      const todolist = [...pending, ...doneArr];   // completed at end
 
-          userBtn.addEventListener("click", () => {
-            userDropdown.classList.toggle("hidden");
-          });
+      const container = document.querySelector("#todos");
+      container.innerHTML = "";
 
-          // Close dropdown when clicking outside
-          document.addEventListener("click", (e) => {
-            if (!userBtn.contains(e.target) && !userDropdown.contains(e.target)) {
-              userDropdown.classList.add("hidden");
-            }
-          });
+      if (todolist.length === 0) {
+        container.innerHTML = `
+          <div class="todo">
+            <span>You do not have any todos</span>
+          </div>`;
+        return;
+      }
 
-          logoutLink.addEventListener("click", async (e) => {
-            e.preventDefault();
-            await fetch("/auth/logout", { method: "POST", credentials: "include" });
-            window.location.href = "/auth/login";
-          });
+      const todayMs = new Date().setHours(0,0,0,0);
 
-          submitButton.addEventListener("click", () => addTask());
-        </script>
-      </body>
+      todolist.forEach(todo => {
+        const creator  = todo.CreatedBy || todo.createdBy || todo.createdby || "";
+        const assignee = todo.assignedto || todo.assignedToName || "";
+        const rawDate  = todo.DueDate   || todo.duedate    || todo.dueDate;
+        const dueMs    = typeof rawDate === "number" ? rawDate : Date.parse(rawDate);
+        const dueDate  = new Date(dueMs);
+        const dayDiff  = Math.floor((dueMs - todayMs) / 86400000);
+
+        let dueClass = "due-later";
+        if (dayDiff < 0)        dueClass = "due-overdue";
+        else if (dayDiff === 0) dueClass = "due-today";
+        else if (dayDiff <= 3)  dueClass = "due-soon";
+
+        const formatted = dueDate.toLocaleDateString(undefined, { year:"numeric", month:"short", day:"numeric" });
+        const checked   = todo.completed ? "checked" : "";
+        const doneClass = todo.completed ? "completed" : "";
+
+        container.innerHTML += `
+          <div class="todo ${doneClass}" data-id="${todo.id}">
+            <input type="checkbox" class="todo-checkbox" ${checked}>
+            <span class="todo-title">${todo.title}</span>
+            <span class="due-date ${dueClass}">Due on: ${formatted}</span>
+            <div class="actions">
+              <button class="edit"><i class="fas fa-edit"></i></button>
+              <button data-id=${todo.id} class="delete"><i class="far fa-trash-alt"></i></button>
+            </div>
+            <span class="created-by">${creator ? creator + " → " + assignee : ""}</span>
+          </div>
+        `;
+      });
+
+      /* --- animate newly added tasks --- */
+      container.querySelectorAll(".todo").forEach(el => {
+        const id = el.getAttribute("data-id");
+        if (!renderedIds.has(id)) {
+          renderedIds.add(id);
+          el.classList.add("animate-entry");
+          // remove class after animation so re‑ordering doesn't retrigger
+          setTimeout(() => el.classList.remove("animate-entry"), 400);
+        }
+      });
+
+      // wire up delete buttons
+      deleteTaskButton();
+
+      // wire up checkbox change handlers
+      document.querySelectorAll(".todo-checkbox").forEach(cb => {
+        cb.onchange = async (e) => {
+          const parent  = e.target.closest(".todo");
+          const todoId  = parent.getAttribute("data-id");
+          const doneNow = e.target.checked;
+          // optimistic UI
+          if (doneNow) parent.classList.add("completed");
+          else         parent.classList.remove("completed");
+          await SetTodoStatus(todoId, doneNow);
+          displayTodos(); // refresh list
+        };
+      });
+    }
+    loadUsers();
+    displayTodos();
+
+    /* ---------- user dropdown + logout ---------- */
+    const userBtn = document.getElementById("userBtn");
+    const userDropdown = document.getElementById("userDropdown");
+    const logoutLink = document.getElementById("logoutLink");
+
+    // ----- view toggle buttons -----
+    const btnAll = document.getElementById("btnAll");
+    const btnMine = document.getElementById("btnMine");
+    const btnAssigned = document.getElementById("btnAssigned");
+
+    function setActive(button) {
+      btnAll.classList.remove("active");
+      btnMine.classList.remove("active");
+      btnAssigned.classList.remove("active");
+      button.classList.add("active");
+    }
+
+    btnAll.addEventListener("click", () => {
+      currentEndpoint = "/todo/";
+      setActive(btnAll);
+      displayTodos();
+    });
+
+    btnMine.addEventListener("click", () => {
+      currentEndpoint = "/todo/createdbyme";
+      setActive(btnMine);
+      displayTodos();
+    });
+
+    btnAssigned.addEventListener("click", () => {
+      currentEndpoint = "/todo/assignedtome";
+      setActive(btnAssigned);
+      displayTodos();
+    });
+
+    userBtn.addEventListener("click", () => {
+      userDropdown.classList.toggle("hidden");
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener("click", (e) => {
+      if (!userBtn.contains(e.target) && !userDropdown.contains(e.target)) {
+        userDropdown.classList.add("hidden");
+      }
+    });
+
+    logoutLink.addEventListener("click", async (e) => {
+      e.preventDefault();
+      await fetch("/auth/logout", { method: "POST", credentials: "include" });
+      window.location.href = "/auth/login";
+    });
+
+    submitButton.addEventListener("click", () => addTask());
+  </script>
+</body>
+
 </html>
 {{end}}
