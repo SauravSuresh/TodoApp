@@ -9,14 +9,14 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/SauravSuresh/todoapp/common"
+	db "github.com/SauravSuresh/persistence"
+	mongorepo "github.com/SauravSuresh/persistence/mongo"
 	"github.com/SauravSuresh/todoapp/handlers"
 	"github.com/SauravSuresh/todoapp/middlewares"
+	"github.com/SauravSuresh/todoapp/services"
 	"github.com/SauravSuresh/todoapp/utils"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func TodoHandlers() chi.Router {
@@ -24,14 +24,19 @@ func TodoHandlers() chi.Router {
 	router.Use(middleware.Logger)
 	router.Use(middlewares.AuthenticationMiddelware)
 	router.Use(middlewares.UserLoaderMiddleware)
+	repo := mongorepo.NewTodoRepository()
+	svc := services.NewTodoService(repo)
+	h := handlers.TodoHandlers{
+		TodoSvc: *svc,
+	}
 	router.Group(func(r chi.Router) {
 		r.Get("/index", handlers.IndexHandler)
-		r.Get("/", handlers.GetTodoHandler)
-		r.Post("/", handlers.CreateTodoHandler)
+		r.Get("/", h.GetTodoHandler)
+		r.Post("/", h.CreateTodoHandler)
 		r.Put("/{id}", handlers.UpdateTodoHandler)
-		r.Delete("/{id}", handlers.DeleteTodoHandler)
-		r.Get("/createdbyme", handlers.GetCreatedTodoHandler)
-		r.Get("/assignedtome", handlers.GetAssignedTodoHandler)
+		r.Delete("/{id}", h.DeleteTodoHandler)
+		r.Get("/createdbyme", h.GetCreatedTodoHandler)
+		r.Get("/assignedtome", h.GetAssignedTodoHandler)
 		r.Post("/setstatus/{id}", handlers.SetStatusHandler)
 	})
 	return router
@@ -56,15 +61,10 @@ func init() {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	var err error
-	common.Client, err = mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
-	utils.CheckErr(err, "failed to connect to db")
+	err := db.CreateConnection(ctx, "mongodb://localhost:27017")
 	if err != nil {
 		return
 	}
-
-	// Use the correct function to get the database name
-	common.Db = common.Client.Database(common.GetDbName())
 }
 
 func main() {

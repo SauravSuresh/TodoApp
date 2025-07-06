@@ -299,6 +299,27 @@
       }
     }
 
+    // Helper to update a todo item via API (PUT /todo/{id})
+    async function UpdateTodo(id, payload) {
+      try {
+        const res = await fetch(`${localhostAddress}/${id}`, {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const text = await res.text();         // capture details for debugging
+          throw new Error(`HTTP ${res.status} – ${text}`);
+        }
+        const result = await res.json();
+        console.log("Update result:", result.message);
+      } catch (err) {
+        alert("Failed to update task — see console for details.");
+        console.error("Failed to update todo:", err);
+      }
+    }
+
     async function SetTodoStatus(id, isDone) {
       try {
         await fetch(`/todo/setstatus/${id}`, {
@@ -384,7 +405,7 @@
           <div class="todo ${doneClass}" data-id="${todo.id}">
             <input type="checkbox" class="todo-checkbox" ${checked}>
             <span class="todo-title">${todo.title}</span>
-            <span class="due-date ${dueClass}">Due on: ${formatted}</span>
+            <span class="due-date ${dueClass}" data-duems="${dueMs}" style="cursor:pointer;">Due on: ${formatted}</span>
             <div class="actions">
               <button class="edit"><i class="fas fa-edit"></i></button>
               <button data-id=${todo.id} class="delete"><i class="far fa-trash-alt"></i></button>
@@ -408,6 +429,23 @@
       // wire up delete buttons
       deleteTaskButton();
 
+      /* attach edit‑button handlers */
+      document.querySelectorAll(".edit").forEach(btn => {
+        btn.onclick = async () => {
+          const parent   = btn.closest(".todo");
+          const todoId   = parent.getAttribute("data-id");
+          const titleEl  = parent.querySelector(".todo-title");
+          const oldTitle = titleEl.textContent.trim();
+
+          const newTitle = prompt("Edit task title:", oldTitle);
+          if (newTitle === null || newTitle.trim() === oldTitle) return; // cancel/no change
+
+          const completed = parent.querySelector(".todo-checkbox").checked;
+          await UpdateTodo(todoId, { title: newTitle.trim(), completed });
+          displayTodos(); // refresh list
+        };
+      });
+
       // wire up checkbox change handlers
       document.querySelectorAll(".todo-checkbox").forEach(cb => {
         cb.onchange = async (e) => {
@@ -419,6 +457,43 @@
           else         parent.classList.remove("completed");
           await SetTodoStatus(todoId, doneNow);
           displayTodos(); // refresh list
+        };
+      });
+
+      /* attach due‑date click handlers */
+      document.querySelectorAll(".due-date").forEach(el => {
+        el.onclick = () => {
+          const parent    = el.closest(".todo");
+          const todoId    = parent.getAttribute("data-id");
+          const currentMs = parseInt(el.getAttribute("data-duems"), 10);
+          const isoToday  = new Date(currentMs).toISOString().slice(0, 10);
+
+          // create a floating <input type="date">
+          const picker = document.createElement("input");
+          picker.type  = "date";
+          picker.value = isoToday;
+
+          const rect = el.getBoundingClientRect();
+          picker.style.position = "absolute";
+          picker.style.left     = rect.left + "px";
+          picker.style.top      = (rect.bottom + window.scrollY) + "px";
+          picker.style.zIndex   = 1000;
+
+          document.body.appendChild(picker);
+          picker.focus();
+
+          picker.onchange = async () => {
+            const newMs = new Date(picker.value).getTime();
+            await UpdateTodo(todoId, { duedate: newMs });
+            displayTodos();     // refresh list
+            picker.blur();      // will trigger onblur handler to clean up
+          };
+
+          picker.onblur = () => {
+            if (document.body.contains(picker)) {
+              document.body.removeChild(picker);
+            }
+          };
         };
       });
     }

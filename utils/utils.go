@@ -6,19 +6,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/SauravSuresh/todoapp/common"
+	db "github.com/SauravSuresh/persistence"
+	"github.com/SauravSuresh/persistence/models"
 	"github.com/dgrijalva/jwt-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 var secretKey = []byte("secretpassword")
-
-func CheckErr(err error, msg string) {
-	if err != nil {
-		log.Fatalf("%s %v \n", msg, err)
-	}
-}
 
 func GenerateToken(userID primitive.ObjectID) (string, error) {
 	claims := jwt.MapClaims{
@@ -57,15 +52,15 @@ func ComparePassword(A string, B string) error {
 }
 
 // TODO: hash passwords
-func MaybeAddUser(newuser common.UserModel, r *http.Request) (interface{}, error) {
+func MaybeAddUser(newuser models.UserModel, r *http.Request) (interface{}, error) {
 	start := time.Now()
 	fmt.Println(newuser.Email)
-	result := common.Db.Collection(common.GetUserCollectionName()).FindOne(r.Context(), bson.M{"email": newuser.Email})
+	result := db.Db.Collection(db.GetUserCollectionName()).FindOne(r.Context(), bson.M{"email": newuser.Email})
 	log.Printf("find-one took %v (err=%v)", time.Since(start), result.Err())
 	if err := result.Err(); err == nil {
 		return nil, fmt.Errorf("user already exists")
 	}
-	data, err := common.Db.Collection(common.GetUserCollectionName()).InsertOne(r.Context(), newuser)
+	data, err := db.Db.Collection(db.GetUserCollectionName()).InsertOne(r.Context(), newuser)
 	if err != nil {
 		return err, nil
 	}
@@ -88,15 +83,15 @@ type contextKey string
 
 const userKey contextKey = "user"
 
-func GetUser(r *http.Request) (*common.UserModel, bool) {
-	usr, ok := r.Context().Value(userKey).(*common.UserModel)
+func GetUser(r *http.Request) (*models.UserModel, bool) {
+	usr, ok := r.Context().Value(userKey).(*models.UserModel)
 	return usr, ok
 }
 
 // todo a fucntion that gets the username from ID
 func GetusernameFromID(userID primitive.ObjectID, r *http.Request) (string, error) {
-	var userfromDB common.UserModel
-	result := common.Db.Collection((common.GetUserCollectionName())).FindOne(r.Context(), bson.M{"id": userID})
+	var userfromDB models.UserModel
+	result := db.Db.Collection((db.GetUserCollectionName())).FindOne(r.Context(), bson.M{"id": userID})
 	if err := result.Err(); err != nil {
 		return "", err
 	}
@@ -107,12 +102,18 @@ func GetusernameFromID(userID primitive.ObjectID, r *http.Request) (string, erro
 }
 
 func UserIDFromContext(r *http.Request) (primitive.ObjectID, error) {
-	switch v := r.Context().Value(common.UserIDKey).(type) {
+	switch v := r.Context().Value(db.UserIDKey).(type) {
 	case string: // raw hex string set by AuthenticationMiddleware
 		return primitive.ObjectIDFromHex(v)
-	case *common.UserModel: // already loaded by UserLoaderMiddleware
+	case *models.UserModel: // already loaded by UserLoaderMiddleware
 		return v.ID, nil
 	default:
 		return primitive.NilObjectID, fmt.Errorf("unauthenticated")
+	}
+}
+
+func CheckErr(err error, msg string) {
+	if err != nil {
+		log.Fatalf("%s %v \n", msg, err)
 	}
 }
