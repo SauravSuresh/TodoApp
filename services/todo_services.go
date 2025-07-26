@@ -3,7 +3,9 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	database "github.com/SauravSuresh/persistence/interfaces"
@@ -68,4 +70,35 @@ func (s *TodoService) Delete(ctx context.Context, id primitive.ObjectID) (*mongo
 		return nil, err
 	}
 	return data, nil
+}
+
+func (s *TodoService) Update(ctx context.Context, id primitive.ObjectID, updateObj models.UpdatePayload) (*mongo.UpdateResult, error) {
+	updateFields := bson.M{}
+	if updateObj.Title != nil {
+		title := strings.TrimSpace(*updateObj.Title)
+		if title == "" {
+			return nil, fmt.Errorf("Title cannot be empty")
+		}
+		updateFields["title"] = title
+	}
+	if updateObj.Completed != nil {
+		updateFields["completed"] = updateObj.Completed
+	}
+	if updateObj.DueDateMs != nil {
+		updateFields["duedate"] = primitive.DateTime(*updateObj.DueDateMs)
+	}
+	if len(updateFields) == 0 {
+		return nil, fmt.Errorf("No fields to udpate")
+	}
+
+	updatefilter := bson.M{"_id": id}
+	update := bson.M{"$set": updateFields}
+
+	log.Printf("filter: %+v update: %+v", updatefilter, update)
+
+	result, err := s.repo.Update(ctx, updatefilter, update)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }

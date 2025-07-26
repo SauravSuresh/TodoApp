@@ -24,39 +24,48 @@
     }
     .todo {
       display: grid;
-      /* grid areas: chk | title | due | actions (row‑1)
-                     chk | meta  | meta| actions (row‑2) */
-      grid-template-areas:
-        "chk title due act"
-        "chk meta  meta act";
-      grid-template-columns: auto 1fr minmax(120px,auto) auto;
-      grid-template-rows: auto auto;
-      column-gap: 0.6rem;
-      row-gap: 0.2rem;
-      padding: 0.55rem 0.8rem 0.5rem;
-      border-bottom: 1px solid #e4e4e4;
-      align-items: center;
+      /* 3 columns: checkbox | stacked content | stacked right (due+actions) */
+      grid-template-areas: "chk content right";
+      grid-template-columns: auto 1fr auto;
+      column-gap: 0.75rem;
+      align-items: start;
+
+      /* Simple list look */
+      padding: 0.6rem 0.8rem; /* modest spacing for readability */
+      border-bottom: 1px solid #e9ecef; /* divider between items */
+      background: transparent;
+      border-radius: 0;
+      box-shadow: none;
+
+      width: 100%;
+      box-sizing: border-box;
     }
     .todo-checkbox { grid-area: chk; margin-right: 2px; transform: scale(1.2); cursor:pointer; }
-    .todo-title    { grid-area: title; word-break: break-word; }
-    .due-date      { grid-area: due; text-align: right; }
-    .actions       { grid-area: act; display:flex; gap:0.25rem; }
-    .created-by    { grid-area: meta; font-size:0.55rem; color:#777;
-                     display:block; margin-top:2px; }
+    .todo-title { word-break: break-word; }
+    .due-date { text-align: right; }
+    .actions { display:flex; gap:0.4rem; align-self:flex-end; opacity:0; max-height:0; overflow:hidden; transition:max-height 180ms ease, opacity 180ms ease; pointer-events:none; }
+    .actions button{ width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center; }
+
+    .todo:hover .actions { opacity:1; max-height:40px; pointer-events:auto; }
+    .created-by { font-size:0.55rem; color:#777; display:block; line-height:1.2; word-break: break-word; }
+    .content { grid-area: content; display:flex; flex-direction:column; gap:0.25rem; min-width:0; }
+    .right   { grid-area: right;   display:flex; flex-direction:column; align-items:flex-end; justify-content:flex-start; gap:0.25rem; }
     .due-date{
       font-size:0.8rem;
       font-weight:600;
-      margin-left:0.75rem;
+      white-space: nowrap;   /* keep on one line */
+      margin: 0;             /* remove left offset */
+      align-self: flex-end;  /* flush to the right of the column */
+      text-align: right;
     }
     .due-overdue  { color:#dc3545; }  /* red */
     .due-today    { color:#ff5722; }  /* orange‑red */
     .due-soon     { color:#ffc107; }  /* amber */
     .due-later    { color:#28a745; }  /* green */
 
-    .completed {
-      opacity: 0.55;
-      text-decoration: line-through;
-    }
+   .completed { opacity: 0.85; }
+   .completed .todo-title, .completed .due-date { text-decoration: line-through; opacity: 0.6; }
+   .completed .created-by { opacity: 0.6; text-decoration: none; }
     .todo-checkbox {
       margin-right: 0.5rem;
       transform: scale(1.2);
@@ -78,6 +87,24 @@
 
     .top-bar .user-name {
       font-weight: 400;
+    }
+
+    /* Header toolbar: left = view toggles, right = due filter */
+    .toolbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:0.75rem;
+      margin-bottom:0.75rem;
+      flex-wrap:wrap;
+    }
+    .due-filter label{ margin-right:0.4rem; font-size:0.9rem; color:#444; }
+    .due-filter select{
+      padding:0.35rem 0.6rem;
+      border:1px solid #ced4da;
+      border-radius:6px;
+      font-family:'Poppins',sans-serif;
+      background:#fff;
     }
 
     /* ↓↓↓ NEW DROPDOWN STYLES ↓↓↓ */
@@ -125,8 +152,8 @@
 
     /* ↑↑↑ END DROPDOWN STYLES ↑↑↑ */
     .view-toggle {
-      margin-bottom: 1rem;
-      text-align: center;
+      margin-bottom: 0;
+      text-align: left;
     }
 
     .toggle-btn {
@@ -170,7 +197,24 @@
     }
 
     .container {
-      padding-bottom: 120px; /* space for floating panel */
+      padding-bottom: 150px; /* space for floating panel */
+      overflow: hidden;
+    }
+    /* Make the todos list scrollable rather than stretching the page */
+    #todos {
+      max-height: 70vh; /* adjust as needed */
+      overflow-y: auto;
+      display: block;         /* back to normal block flow */
+      padding: 0.3rem;        /* keep some inset from container */
+    }
+
+    /* Optional: scrollbar aesthetics (WebKit/Blink) */
+    #todos::-webkit-scrollbar {
+      width: 6px;
+    }
+    #todos::-webkit-scrollbar-thumb {
+      background-color: #bbb;
+      border-radius: 3px;
     }
   </style>
 </head>
@@ -188,10 +232,22 @@
     </div>
   </header>
   <div class="container">
-    <div class="view-toggle">
-      <button id="btnAll" class="toggle-btn active">All Tasks</button>
-      <button id="btnMine" class="toggle-btn">Created Tasks</button>
-      <button id="btnAssigned" class="toggle-btn">Assigned To Me</button>
+    <div class="toolbar">
+      <div class="view-toggle">
+        <button id="btnAll" class="toggle-btn active">All Tasks</button>
+        <button id="btnMine" class="toggle-btn">Created Tasks</button>
+        <button id="btnAssigned" class="toggle-btn">Assigned To Me</button>
+      </div>
+      <div class="due-filter">
+        <label for="dueSelect">Due:</label>
+        <select id="dueSelect">
+          <option value="all" selected>All</option>
+          <option value="overdue">Overdue</option>
+          <option value="today">Today</option>
+          <option value="soon">Next 3 days</option>
+          <option value="later">Later</option>
+        </select>
+      </div>
     </div>
     <div id="new-todo">
       <input id="titleInput" type="text" placeholder="Task title" />
@@ -214,6 +270,7 @@
     const dueDateInput = document.getElementById("dueDateInput");
     const assignedToSelect = document.getElementById("assignedToSelect");
     let submitButton = document.getElementById("submit");
+    let dueFilter = "all"; // all | overdue | today | soon | later
 
     const renderedIds = new Set();   // track which todos have been displayed
 
@@ -300,37 +357,48 @@
     }
 
     // Helper to update a todo item via API (PUT /todo/{id})
-    async function UpdateTodo(id, payload) {
+   async function UpdateTodo(id, payload) {
+  try {
+    const res = await fetch(`${localhostAddress}/${id}`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const contentType = res.headers.get("content-type") || "";
+
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+
       try {
-        const res = await fetch(`${localhostAddress}/${id}`, {
-          method: "PUT",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-        if (!res.ok) {
-          const text = await res.text();         // capture details for debugging
-          throw new Error(`HTTP ${res.status} – ${text}`);
+        if (contentType.includes("application/json")) {
+          const data = await res.json();
+          // Prefer the backend-provided error text
+          msg = data.error || data.message || msg;
+        } else {
+          const text = await res.text();
+          msg = text || msg;
         }
-        const result = await res.json();
-        console.log("Update result:", result.message);
-      } catch (err) {
-        alert("Failed to update task — see console for details.");
-        console.error("Failed to update todo:", err);
+      } catch {
+        // swallow parsing errors, keep fallback msg
       }
+
+      alert(msg);            // e.g., "Title cannot be empty"
+      console.error("Update failed:", msg);
+      return;                // stop here on error
     }
 
-    async function SetTodoStatus(id, isDone) {
-      try {
-        await fetch(`/todo/setstatus/${id}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ update: isDone })
-        });
-      } catch (err) {
-        console.error("Failed to update status:", err);
-      }
-    }
+    // Success
+    const result = contentType.includes("application/json") ? await res.json() : null;
+    console.log("Update result:", result?.message ?? "OK");
+  } catch (err) {
+    // Network or unexpected errors
+    alert(err?.message ?? "Failed to update task");
+    console.error("Failed to update todo:", err);
+  }
+}
+
 
     function deleteTaskButton() {
       const deleteTodoButtons = document.querySelectorAll(".delete")
@@ -363,28 +431,69 @@
       assignedToSelect.value = "";
     }
 
+    function matchesDue(todo, todayMs) {
+      const rawDate = todo.DueDate || todo.duedate || todo.dueDate;
+      const dueMs   = typeof rawDate === "number" ? rawDate : Date.parse(rawDate);
+      if (Number.isNaN(dueMs)) {
+        // tasks without a parsable due date are shown only when "All" is selected
+        return dueFilter === "all";
+      }
+      const dayDiff = Math.floor((dueMs - todayMs) / 86400000);
+      switch (dueFilter) {
+        case "overdue": return dayDiff < 0;
+        case "today":   return dayDiff === 0;
+        case "soon":    return dayDiff > 0 && dayDiff <= 3;
+        case "later":   return dayDiff > 3;
+        case "all":
+        default:         return true;
+      }
+    }
+
+    function getDueMs(todo) {
+      const rawDate = todo.DueDate || todo.duedate || todo.dueDate;
+      const dueMs   = typeof rawDate === "number" ? rawDate : Date.parse(rawDate);
+      return Number.isNaN(dueMs) ? Number.POSITIVE_INFINITY : dueMs;
+    }
+
+    function byProximityToToday(a, b, todayMs) {
+      const da = Math.floor((getDueMs(a) - todayMs) / 86400000);
+      const db = Math.floor((getDueMs(b) - todayMs) / 86400000);
+      const aa = Math.abs(da), ab = Math.abs(db);
+      if (aa !== ab) return aa - ab;   // nearer dates first
+      return da - db;                  // tie-break: overdue (negative) first
+    }
+
     async function displayTodos() {
       const rawList = await getTodos();
       // separate pending vs completed
       const pending = [];
       const doneArr = [];
       rawList.forEach(t => (t.completed ? doneArr : pending).push(t));
+
+      const todayMs   = new Date().setHours(0,0,0,0);
+
+      // In 'All Tasks' view, sort by proximity to today (nearest first),
+      // while keeping completed items at the end.
+      if (currentEndpoint === "/todo/") {
+        pending.sort((a,b) => byProximityToToday(a,b,todayMs));
+        doneArr.sort((a,b) => byProximityToToday(a,b,todayMs));
+      }
+
       const todolist = [...pending, ...doneArr];   // completed at end
+      const filtered  = todolist.filter(t => matchesDue(t, todayMs));
 
       const container = document.querySelector("#todos");
       container.innerHTML = "";
 
-      if (todolist.length === 0) {
+      if (filtered.length === 0) {
         container.innerHTML = `
           <div class="todo">
-            <span>You do not have any todos</span>
+            <span>No tasks match the selected due filter.</span>
           </div>`;
         return;
       }
 
-      const todayMs = new Date().setHours(0,0,0,0);
-
-      todolist.forEach(todo => {
+      filtered.forEach(todo => {
         const creator  = todo.CreatedBy || todo.createdBy || todo.createdby || "";
         const assignee = todo.assignedto || todo.assignedToName || "";
         const rawDate  = todo.DueDate   || todo.duedate    || todo.dueDate;
@@ -404,13 +513,17 @@
         container.innerHTML += `
           <div class="todo ${doneClass}" data-id="${todo.id}">
             <input type="checkbox" class="todo-checkbox" ${checked}>
-            <span class="todo-title">${todo.title}</span>
-            <span class="due-date ${dueClass}" data-duems="${dueMs}" style="cursor:pointer;">Due on: ${formatted}</span>
-            <div class="actions">
-              <button class="edit"><i class="fas fa-edit"></i></button>
-              <button data-id=${todo.id} class="delete"><i class="far fa-trash-alt"></i></button>
+            <div class="content">
+              <span class="todo-title">${todo.title}</span>
+              <span class="created-by">${creator ? creator + " → " + assignee : ""}</span>
             </div>
-            <span class="created-by">${creator ? creator + " → " + assignee : ""}</span>
+            <div class="right">
+              <span class="due-date ${dueClass}" data-duems="${dueMs}" style="cursor:pointer;">Due on: ${formatted}</span>
+              <div class="actions">
+                <button class="edit"><i class="fas fa-edit"></i></button>
+                <button data-id=${todo.id} class="delete"><i class="far fa-trash-alt"></i></button>
+              </div>
+            </div>
           </div>
         `;
       });
@@ -447,15 +560,16 @@
       });
 
       // wire up checkbox change handlers
-      document.querySelectorAll(".todo-checkbox").forEach(cb => {
-        cb.onchange = async (e) => {
-          const parent  = e.target.closest(".todo");
-          const todoId  = parent.getAttribute("data-id");
-          const doneNow = e.target.checked;
+      document.querySelectorAll(".todo-checkbox").forEach(checkbox => {
+        checkbox.onchange = async (e) => {
+          const parent = checkbox.closest(".todo");
+          const id = parent.getAttribute("data-id");
+          const isDone = checkbox.checked;
           // optimistic UI
-          if (doneNow) parent.classList.add("completed");
-          else         parent.classList.remove("completed");
-          await SetTodoStatus(todoId, doneNow);
+          if (isDone) parent.classList.add("completed");
+          else        parent.classList.remove("completed");
+          const title = parent.querySelector(".todo-title").textContent.trim();
+          await UpdateTodo(id, { title: title, completed: isDone });
           displayTodos(); // refresh list
         };
       });
@@ -496,6 +610,7 @@
           };
         };
       });
+
     }
     loadUsers();
     displayTodos();
@@ -534,6 +649,16 @@
       setActive(btnAssigned);
       displayTodos();
     });
+
+
+    // ----- due-date filter dropdown -----
+    const dueSelect = document.getElementById("dueSelect");
+    if (dueSelect) {
+      dueSelect.addEventListener("change", () => {
+        dueFilter = dueSelect.value; // all | overdue | today | soon | later
+        displayTodos();
+      });
+    }
 
     userBtn.addEventListener("click", () => {
       userDropdown.classList.toggle("hidden");

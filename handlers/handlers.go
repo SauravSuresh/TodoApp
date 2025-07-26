@@ -161,83 +161,6 @@ func (t *TodoHandlers) GetAssignedTodoHandler(rw http.ResponseWriter, r *http.Re
 	})
 }
 
-func UpdateTodoHandler(rw http.ResponseWriter, r *http.Request) {
-	id := strings.TrimSpace(chi.URLParam(r, "id"))
-	oid, err := primitive.ObjectIDFromHex(id)
-	if err != nil {
-		log.Printf("invalid hex id %q: %v", id, err)
-		rnd.JSON(rw, http.StatusBadRequest, renderer.M{
-			"message": "The id is invalid",
-			"error":   err.Error(),
-		})
-		return
-	}
-
-	// Accept partial updates
-	type updatePayload struct {
-		Title     *string `json:"title,omitempty"`
-		Completed *bool   `json:"completed,omitempty"`
-		DueDateMs *int64  `json:"duedate,omitempty"` // epoch‑ms
-	}
-
-	var p updatePayload
-	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-		log.Printf("decode error: %v", err)
-		rnd.JSON(rw, http.StatusBadRequest, renderer.M{
-			"message": "Failed to decode JSON",
-			"error":   err.Error(),
-		})
-		return
-	}
-	log.Printf("UpdateTodoHandler — payload: %+v", p)
-
-	updateFields := bson.M{}
-	if p.Title != nil {
-		title := strings.TrimSpace(*p.Title)
-		if title == "" {
-			rnd.JSON(rw, http.StatusBadRequest, renderer.M{
-				"message": "Title cannot be empty",
-			})
-			return
-		}
-		updateFields["title"] = title
-	}
-	if p.Completed != nil {
-		updateFields["completed"] = *p.Completed
-	}
-	if p.DueDateMs != nil {
-		updateFields["duedate"] = primitive.DateTime(*p.DueDateMs)
-	}
-
-	if len(updateFields) == 0 {
-		rnd.JSON(rw, http.StatusBadRequest, renderer.M{
-			"message": "No fields to update",
-		})
-		return
-	}
-
-	filter := bson.M{"_id": oid}
-	update := bson.M{"$set": updateFields}
-	log.Printf("filter: %+v update: %+v", filter, update)
-
-	coll := db.Db.Collection(db.GetTodoCollectionName())
-	result, err := coll.UpdateOne(r.Context(), filter, update)
-	if err != nil {
-		log.Printf("db update failed: %v", err)
-		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
-			"message": "Failed to update data in the database",
-			"error":   err.Error(),
-		})
-		return
-	}
-
-	log.Printf("matched=%d modified=%d", result.MatchedCount, result.ModifiedCount)
-	rnd.JSON(rw, http.StatusOK, renderer.M{
-		"message": "Todo updated successfully",
-		"data":    result.ModifiedCount,
-	})
-}
-
 func (t *TodoHandlers) DeleteTodoHandler(rw http.ResponseWriter, r *http.Request) {
 
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
@@ -261,6 +184,47 @@ func (t *TodoHandlers) DeleteTodoHandler(rw http.ResponseWriter, r *http.Request
 			"data":    data,
 		})
 	}
+}
+
+func (t *TodoHandlers) UpdateTodoHandler(rw http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	oid, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		log.Printf("invalid hex id %q: %v", id, err)
+		rnd.JSON(rw, http.StatusBadRequest, renderer.M{
+			"message": "The id is invalid",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	var p models.UpdatePayload
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		log.Printf("decode error: %v", err)
+		rnd.JSON(rw, http.StatusBadRequest, renderer.M{
+			"message": "Failed to decode JSON",
+			"error":   err.Error(),
+		})
+		return
+	}
+	log.Printf("UpdateTodoHandler — payload: %+v", p)
+
+	result, err := t.TodoSvc.Update(r.Context(), oid, p)
+
+	if err != nil {
+		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
+			"message": "failed to update todo",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	log.Printf("matched=%d modified=%d", result.MatchedCount, result.ModifiedCount)
+
+	rnd.JSON(rw, http.StatusOK, renderer.M{
+		"message": "Todo updated successfully",
+		"data":    result.ModifiedCount,
+	})
 }
 
 // user handlers
@@ -413,51 +377,4 @@ func LoginAttemptHandler(rw http.ResponseWriter, r *http.Request) {
 
 	http.SetCookie(rw, utils.AddAuthCookie(tokenstring))
 	http.Redirect(rw, r, "/todo/index", http.StatusSeeOther)
-}
-
-func SetStatusHandler(rw http.ResponseWriter, r *http.Request) {
-
-	id := strings.TrimSpace(chi.URLParam(r, "id"))
-
-	var updatereq models.SetStatusRequest
-	res, err := primitive.ObjectIDFromHex(id)
-	if err != nil {
-		log.Printf("the id param is not a valid hex value: %v\n", err.Error())
-		rnd.JSON(rw, http.StatusBadRequest, renderer.M{
-			"message": "The id is invalid",
-			"error":   err.Error(),
-		})
-		return
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&updatereq); err != nil {
-		rnd.JSON(rw, http.StatusBadRequest, renderer.M{
-			"message": "Failed to decode JSON",
-			"error":   err.Error(),
-		})
-		return
-	}
-	fmt.Printf("update from post is %v", updatereq.Update)
-
-	filter := bson.M{"_id": res}
-	update := bson.M{"$set": bson.M{
-		"completed": updatereq.Update,
-	}}
-	// DEBUG: confirm we got the right ObjectID
-	fmt.Printf("SetStatusHandler — resolved ObjectID: %s\n", res.Hex())
-
-	data, err := db.Db.Collection(db.GetTodoCollectionName()).UpdateOne(r.Context(), filter, update)
-	if err != nil {
-		log.Printf("failed to update db collection: %v\n", err.Error())
-		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
-			"message": "Failed to update data in the database",
-			"error":   err.Error(),
-		})
-		return
-	}
-	rnd.JSON(rw, http.StatusOK, renderer.M{
-		"message": "Todo updated successfully",
-		"data":    data.ModifiedCount,
-	})
-
 }
