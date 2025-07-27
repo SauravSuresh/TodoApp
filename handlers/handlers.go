@@ -93,7 +93,7 @@ func (t *TodoHandlers) CreateTodoHandler(rw http.ResponseWriter, r *http.Request
 	if err != nil {
 		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
 			"message": "Failed to add todo to db",
-			"error":   err,
+			"error":   err.Error(),
 		})
 		return
 	}
@@ -106,7 +106,7 @@ func (t *TodoHandlers) CreateTodoHandler(rw http.ResponseWriter, r *http.Request
 
 func (t *TodoHandlers) GetTodoHandler(rw http.ResponseWriter, r *http.Request) {
 	var todoList []models.Todo
-	todoList, err := t.TodoSvc.Get(r.Context(), "", primitive.NilObjectID, r)
+	todoList, err := t.TodoSvc.Get(r.Context(), map[string]interface{}{}, r)
 	if err != nil {
 		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
 			"message": "Could not get todos",
@@ -127,7 +127,7 @@ func (t *TodoHandlers) GetCreatedTodoHandler(rw http.ResponseWriter, r *http.Req
 	}
 
 	var todoList []models.Todo
-	todoList, err = t.TodoSvc.Get(r.Context(), "createdby", uid, r)
+	todoList, err = t.TodoSvc.Get(r.Context(), map[string]interface{}{"createdby": uid}, r)
 	if err != nil {
 		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
 			"message": "Could not get todos",
@@ -148,7 +148,35 @@ func (t *TodoHandlers) GetAssignedTodoHandler(rw http.ResponseWriter, r *http.Re
 	}
 
 	var todoList []models.Todo
-	todoList, err = t.TodoSvc.Get(r.Context(), "assignedto", uid, r)
+	todoList, err = t.TodoSvc.Get(r.Context(), map[string]interface{}{"assignedto": uid}, r)
+	if err != nil {
+		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
+			"message": "Could not get todos",
+			"error":   err.Error(),
+		})
+	}
+	rnd.JSON(rw, http.StatusOK, models.GetObjectResponse{
+		Message: "All Todos retrieved",
+		Data:    todoList,
+	})
+}
+
+func (t *TodoHandlers) GetInboxTodoHandler(rw http.ResponseWriter, r *http.Request) {
+	uid, err := utils.UserIDFromContext(r)
+	if err != nil {
+		rnd.JSON(rw, http.StatusUnauthorized, renderer.M{"message": err.Error()})
+		return
+	}
+
+	var todoList []models.Todo
+	todoList, err = t.TodoSvc.Get(
+		r.Context(),
+		map[string]interface{}{
+			"assignedto": uid,
+			"accepted":   false,
+		},
+		r,
+	)
 	if err != nil {
 		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
 			"message": "Could not get todos",

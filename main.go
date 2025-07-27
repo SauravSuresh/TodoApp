@@ -37,6 +37,7 @@ func TodoHandlers() chi.Router {
 		r.Delete("/{id}", h.DeleteTodoHandler)
 		r.Get("/createdbyme", h.GetCreatedTodoHandler)
 		r.Get("/assignedtome", h.GetAssignedTodoHandler)
+		r.Get("/myinbox", h.GetInboxTodoHandler)
 	})
 	return router
 }

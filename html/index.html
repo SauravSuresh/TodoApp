@@ -58,6 +58,12 @@
       align-self: flex-end;  /* flush to the right of the column */
       text-align: right;
     }
+    .created-date{
+      font-size:0.7rem;
+      color:#666;
+      white-space: nowrap;
+      text-align: right;
+    }
     .due-overdue  { color:#dc3545; }  /* red */
     .due-today    { color:#ff5722; }  /* orange‑red */
     .due-soon     { color:#ffc107; }  /* amber */
@@ -98,8 +104,8 @@
       margin-bottom:0.75rem;
       flex-wrap:wrap;
     }
-    .due-filter label{ margin-right:0.4rem; font-size:0.9rem; color:#444; }
-    .due-filter select{
+    .due-filter label, .order-filter label{ margin-right:0.4rem; font-size:0.9rem; color:#444; }
+    .due-filter select, .order-filter select{
       padding:0.35rem 0.6rem;
       border:1px solid #ced4da;
       border-radius:6px;
@@ -246,6 +252,14 @@
           <option value="today">Today</option>
           <option value="soon">Next 3 days</option>
           <option value="later">Later</option>
+          <option value="unplanned">Unplanned</option>
+        </select>
+      </div>
+      <div class="order-filter">
+        <label for="orderSelect">Order by:</label>
+        <select id="orderSelect">
+          <option value="due" selected>Due date</option>
+          <option value="created">Created date</option>
         </select>
       </div>
     </div>
@@ -271,6 +285,7 @@
     const assignedToSelect = document.getElementById("assignedToSelect");
     let submitButton = document.getElementById("submit");
     let dueFilter = "all"; // all | overdue | today | soon | later
+    let orderBy = "due";   // due | created
 
     const renderedIds = new Set();   // track which todos have been displayed
 
@@ -331,9 +346,15 @@
             "Content-Type": "application/json",
           },
           body: JSON.stringify(data),
-        })
+        });
         const result = await response.json();
-        console.log("success", result.message);
+        if (!response.ok) {
+          const msg = result.error || result.message || "Failed to create task.";
+          alert("Error: " + msg);
+          console.error("Create failed:", msg);
+          return;
+        }
+        console.log("Success:", result.message);
       } catch (error) {
         console.error("Error:", error);
         return [];
@@ -413,15 +434,16 @@
     }
 
     async function addTask() {
-      const dueMs = new Date(dueDateInput.value).getTime();   // epoch-ms
-
       const assignedId = assignedToSelect.value || currentUserId;
 
       const data = {
         title: titleInput.value.trim(),
-        duedate: dueMs,
         assignedto: assignedId
       };
+
+      if (dueDateInput.value) {
+        data.duedate = new Date(dueDateInput.value).getTime();  // only set if present
+      }
 
       await CreateTodo(data);
       displayTodos()
@@ -435,8 +457,10 @@
       const rawDate = todo.DueDate || todo.duedate || todo.dueDate;
       const dueMs   = typeof rawDate === "number" ? rawDate : Date.parse(rawDate);
       if (Number.isNaN(dueMs)) {
-        // tasks without a parsable due date are shown only when "All" is selected
-        return dueFilter === "all";
+        return dueFilter === "all" || dueFilter === "unplanned";
+      } 
+      if (dueFilter === "unplanned") {
+        return false;  // exclude dated tasks when filtering for unplanned
       }
       const dayDiff = Math.floor((dueMs - todayMs) / 86400000);
       switch (dueFilter) {
@@ -453,6 +477,16 @@
       const rawDate = todo.DueDate || todo.duedate || todo.dueDate;
       const dueMs   = typeof rawDate === "number" ? rawDate : Date.parse(rawDate);
       return Number.isNaN(dueMs) ? Number.POSITIVE_INFINITY : dueMs;
+    }
+
+    function getCreatedMs(todo) {
+      const raw = todo.CreatedAt || todo.createdAt || todo.createdat || todo.created;
+      const ms  = typeof raw === "number" ? raw : Date.parse(raw);
+      return Number.isNaN(ms) ? 0 : ms; // default to 0 if unavailable
+    }
+
+    function compareCreatedDesc(a, b) {
+      return getCreatedMs(b) - getCreatedMs(a);
     }
 
     function byProximityToToday(a, b, todayMs) {
@@ -472,9 +506,11 @@
 
       const todayMs   = new Date().setHours(0,0,0,0);
 
-      // In 'All Tasks' view, sort by proximity to today (nearest first),
-      // while keeping completed items at the end.
-      if (currentEndpoint === "/todo/") {
+      // Sorting logic based on orderBy dropdown
+      if (orderBy === "created") {
+        pending.sort(compareCreatedDesc);
+        doneArr.sort(compareCreatedDesc);
+      } else {
         pending.sort((a,b) => byProximityToToday(a,b,todayMs));
         doneArr.sort((a,b) => byProximityToToday(a,b,todayMs));
       }
@@ -496,6 +532,8 @@
       filtered.forEach(todo => {
         const creator  = todo.CreatedBy || todo.createdBy || todo.createdby || "";
         const assignee = todo.assignedto || todo.assignedToName || "";
+
+        // Due date
         const rawDate  = todo.DueDate   || todo.duedate    || todo.dueDate;
         const dueMs    = typeof rawDate === "number" ? rawDate : Date.parse(rawDate);
         const dueDate  = new Date(dueMs);
@@ -506,7 +544,19 @@
         else if (dayDiff === 0) dueClass = "due-today";
         else if (dayDiff <= 3)  dueClass = "due-soon";
 
-        const formatted = dueDate.toLocaleDateString(undefined, { year:"numeric", month:"short", day:"numeric" });
+        const dueFormatted = Number.isNaN(dueMs) || !rawDate
+          ? "No due date"
+          : dueDate.toLocaleDateString(undefined, { year:"numeric", month:"short", day:"numeric" });
+
+        // Created date (show in Created Tasks view; safe to compute always)
+        const createdRaw = todo.CreatedAt || todo.createdAt || todo.createdat || todo.created;
+        const createdMs  = typeof createdRaw === "number" ? createdRaw : Date.parse(createdRaw);
+        const createdFormatted = Number.isNaN(createdMs) ? "" : new Date(createdMs).toLocaleDateString(undefined, { year:"numeric", month:"short", day:"numeric" });
+        const showCreated = currentEndpoint === "/todo/createdbyme";
+        const createdHtml = (showCreated && createdFormatted)
+          ? `<span class="created-date">Created: ${createdFormatted}</span>`
+          : "";
+
         const checked   = todo.completed ? "checked" : "";
         const doneClass = todo.completed ? "completed" : "";
 
@@ -518,7 +568,8 @@
               <span class="created-by">${creator ? creator + " → " + assignee : ""}</span>
             </div>
             <div class="right">
-              <span class="due-date ${dueClass}" data-duems="${dueMs}" style="cursor:pointer;">Due on: ${formatted}</span>
+              <span class="due-date ${dueClass}" data-duems="${dueMs}" style="cursor:pointer;">Due on: ${dueFormatted}</span>
+              ${createdHtml}
               <div class="actions">
                 <button class="edit"><i class="fas fa-edit"></i></button>
                 <button data-id=${todo.id} class="delete"><i class="far fa-trash-alt"></i></button>
@@ -656,6 +707,13 @@
     if (dueSelect) {
       dueSelect.addEventListener("change", () => {
         dueFilter = dueSelect.value; // all | overdue | today | soon | later
+        displayTodos();
+      });
+    }
+    const orderSelect = document.getElementById("orderSelect");
+    if (orderSelect) {
+      orderSelect.addEventListener("change", () => {
+        orderBy = orderSelect.value; // due | created
         displayTodos();
       });
     }

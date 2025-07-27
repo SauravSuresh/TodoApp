@@ -25,13 +25,24 @@ func NewTodoService(r database.TodoRepository) *TodoService {
 }
 
 func (s *TodoService) Create(ctx context.Context, req models.CreateTodoRequest, uid primitive.ObjectID) (primitive.ObjectID, error) {
+
+	var dueDatePtr primitive.DateTime
+	if req.DueDateMs > 0 {
+		startOfToday := time.Now().Truncate(24 * time.Hour).UnixMilli()
+		if req.DueDateMs < startOfToday {
+			return primitive.NilObjectID, fmt.Errorf("Due date cannot be before today")
+		}
+		dt := primitive.DateTime(req.DueDateMs)
+		dueDatePtr = dt
+	}
 	todo := &models.Todo{
 		Title:      req.Title,
-		DueDate:    primitive.DateTime(req.DueDateMs),
+		DueDate:    dueDatePtr,
 		AssignedTo: req.AssignedTo,
 	}
 	todomodel := todo.ToTodoModel()
 	todomodel.CreatedAt = primitive.NewDateTimeFromTime(time.Now())
+	log.Printf("Set CreatedAt to: %v", todomodel.CreatedAt.Time())
 	todomodel.DueDate = primitive.DateTime(req.DueDateMs)
 	todomodel.CreatedBy = uid
 
@@ -42,24 +53,32 @@ func (s *TodoService) Create(ctx context.Context, req models.CreateTodoRequest, 
 	return s.repo.Create(ctx, todomodel)
 }
 
-func (s *TodoService) Get(ctx context.Context, key string, id primitive.ObjectID, r *http.Request) ([]models.Todo, error) {
-	var filter interface{}
-	if key == "" {
-		filter = bson.D{}
+func (s *TodoService) Get(ctx context.Context, filter map[string]interface{}, r *http.Request) ([]models.Todo, error) {
+	var bsonFilter interface{}
+
+	// Build the filter from the provided map
+	if len(filter) == 0 {
+		bsonFilter = bson.D{}
 	} else {
-		filter = bson.D{{Key: key, Value: id}}
+		var doc bson.D
+		for k, v := range filter {
+			doc = append(doc, bson.E{Key: k, Value: v})
+		}
+		bsonFilter = doc
 	}
-	todofromdb, err := s.repo.Get(ctx, filter)
+
+	todofromdb, err := s.repo.Get(ctx, bsonFilter)
 	if err != nil {
 		return nil, err
 	}
+
 	todoList := []models.Todo{}
 	for _, td := range todofromdb {
 		createdbyname, _ := utils.GetusernameFromID(td.CreatedBy, r)
 		assignbyname, _ := utils.GetusernameFromID(td.AssignedTo, r)
-		fmt.Printf("assigned %s", assignbyname)
 		todoList = append(todoList, td.ToTodo(createdbyname, assignbyname))
 	}
+
 	return todoList, nil
 }
 
