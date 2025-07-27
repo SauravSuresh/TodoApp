@@ -170,12 +170,40 @@
       border-radius: 4px;
       cursor: pointer;
       font-family: 'Poppins', sans-serif;
+      position: relative;
     }
 
     .toggle-btn.active {
       background: #007bff;
       color: #fff;
       border-color: #007bff;
+    }
+
+    /* Inbox count badge */
+    .counter-badge {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: #dc3545; /* red */
+      color: #fff;
+      font-size: 12px;
+      line-height: 18px;
+      text-align: center;
+      display: none; /* hidden by default */
+      pointer-events: none;
+    }
+    .toggle-btn.has-badge .counter-badge { display: inline-block; }
+    /* Dot style when count === 1 */
+    .counter-badge.is-dot {
+      min-width: 10px;
+      width: 10px;
+      height: 10px;
+      padding: 0;
+      line-height: 10px;
     }
 
     /* Floating “Add Task” panel */
@@ -240,9 +268,10 @@
   <div class="container">
     <div class="toolbar">
       <div class="view-toggle">
-        <button id="btnAll" class="toggle-btn active">All Tasks</button>
-        <button id="btnMine" class="toggle-btn">Created Tasks</button>
-        <button id="btnAssigned" class="toggle-btn">Assigned To Me</button>
+        <button type="button" id="btnAll" class="toggle-btn active">All Tasks</button>
+        <button type="button" id="btnMine" class="toggle-btn">Created Tasks</button>
+        <button type="button" id="btnAssigned" class="toggle-btn">Assigned To Me</button>
+        <button type="button" id="btnInbox" class="toggle-btn">My Inbox<span id="inboxBadge" class="counter-badge"></span></button>
       </div>
       <div class="due-filter">
         <label for="dueSelect">Due:</label>
@@ -323,10 +352,15 @@
 
     async function getTodos() {
       try {
-        const response = await fetch(`http://localhost:9000${currentEndpoint}`, {
+        const url = `http://localhost:9000${currentEndpoint}`;
+        console.log("[getTodos] fetching:", url);
+        const response = await fetch(url, {
           credentials: "include"
         });
         const responseData = await response.json();
+        if (!response.ok) {
+          console.error("[getTodos] HTTP", response.status, response.statusText, responseData);
+        }
         console.log("Fetched todos array:", responseData.data);
         return responseData.data || [];
       } catch (error) {
@@ -497,6 +531,48 @@
       return da - db;                  // tie-break: overdue (negative) first
     }
 
+    async function fetchInboxCount() {
+      try {
+        const res = await fetch("http://localhost:9000/todo/myinbox", { credentials: "include" });
+        const data = await res.json();
+        const arr = data?.data;
+        return Array.isArray(arr) ? arr.length : 0;
+      } catch (e) {
+        console.error("Failed to fetch inbox count:", e);
+        return 0;
+      }
+    }
+
+    async function updateInboxBadge() {
+      const btn = document.getElementById("btnInbox");
+      const badge = document.getElementById("inboxBadge");
+      if (!btn || !badge) return;
+
+      const count = await fetchInboxCount();
+      console.log("[badge] inbox count:", count);
+
+      if (count <= 0) {
+        // Hide when empty
+        badge.textContent = "";
+        badge.classList.remove("is-dot");
+        btn.classList.remove("has-badge");
+        return;
+      }
+
+      // Show badge
+      btn.classList.add("has-badge");
+
+      if (count === 1) {
+        // Pixel-like: a dot for exactly one item
+        badge.textContent = "";
+        badge.classList.add("is-dot");
+      } else {
+        // 2 or more → show the number
+        badge.classList.remove("is-dot");
+        badge.textContent = count > 99 ? "99+" : String(count);
+      }
+    }
+
     async function displayTodos() {
       const rawList = await getTodos();
       // separate pending vs completed
@@ -560,6 +636,13 @@
         const checked   = todo.completed ? "checked" : "";
         const doneClass = todo.completed ? "completed" : "";
 
+        const inInbox = currentEndpoint === "/todo/myinbox";
+        const actionsHtml = inInbox
+          ? `<button class="accept" data-id="${todo.id}" title="Accept"><i class="fas fa-check"></i></button>
+            <button class="reject" data-id="${todo.id}" title="Reject"><i class="fas fa-times"></i></button>`
+          : `<button class="edit"><i class="fas fa-edit"></i></button>
+            <button data-id=${todo.id} class="delete"><i class="far fa-trash-alt"></i></button>`;
+
         container.innerHTML += `
           <div class="todo ${doneClass}" data-id="${todo.id}">
             <input type="checkbox" class="todo-checkbox" ${checked}>
@@ -570,10 +653,7 @@
             <div class="right">
               <span class="due-date ${dueClass}" data-duems="${dueMs}" style="cursor:pointer;">Due on: ${dueFormatted}</span>
               ${createdHtml}
-              <div class="actions">
-                <button class="edit"><i class="fas fa-edit"></i></button>
-                <button data-id=${todo.id} class="delete"><i class="far fa-trash-alt"></i></button>
-              </div>
+              <div class="actions">${actionsHtml}</div>
             </div>
           </div>
         `;
@@ -609,6 +689,24 @@
           displayTodos(); // refresh list
         };
       });
+
+      if (currentEndpoint === "/todo/myinbox") {
+      document.querySelectorAll(".accept").forEach(btn => {
+        btn.onclick = async () => {
+          const id = btn.getAttribute("data-id");
+          await UpdateTodo(id, { accepted: true });
+          displayTodos();
+        };
+      });
+
+      document.querySelectorAll(".reject").forEach(btn => {
+        btn.onclick = async () => {
+          const id = btn.getAttribute("data-id");
+          await UpdateTodo(id, { accepted: false, assignedto: "" });
+          displayTodos();
+        };
+      });
+    }
 
       // wire up checkbox change handlers
       document.querySelectorAll(".todo-checkbox").forEach(checkbox => {
@@ -662,9 +760,11 @@
         };
       });
 
+      updateInboxBadge();
     }
     loadUsers();
     displayTodos();
+    updateInboxBadge();
 
     /* ---------- user dropdown + logout ---------- */
     const userBtn = document.getElementById("userBtn");
@@ -675,31 +775,45 @@
     const btnAll = document.getElementById("btnAll");
     const btnMine = document.getElementById("btnMine");
     const btnAssigned = document.getElementById("btnAssigned");
+    const btnInbox = document.getElementById("btnInbox");
 
     function setActive(button) {
       btnAll.classList.remove("active");
       btnMine.classList.remove("active");
       btnAssigned.classList.remove("active");
+      if (btnInbox) btnInbox.classList.remove("active");
       button.classList.add("active");
     }
 
     btnAll.addEventListener("click", () => {
       currentEndpoint = "/todo/";
+      console.log("[btnAll] clicked. currentEndpoint:", currentEndpoint);
       setActive(btnAll);
       displayTodos();
     });
 
     btnMine.addEventListener("click", () => {
       currentEndpoint = "/todo/createdbyme";
+      console.log("[btnMine] clicked. currentEndpoint:", currentEndpoint);
       setActive(btnMine);
       displayTodos();
     });
 
     btnAssigned.addEventListener("click", () => {
       currentEndpoint = "/todo/assignedtome";
+      console.log("[btnAssigned] clicked. currentEndpoint:", currentEndpoint);
       setActive(btnAssigned);
       displayTodos();
     });
+
+    if (btnInbox) {
+      btnInbox.addEventListener("click", () => {
+        currentEndpoint = "/todo/myinbox"; // tasks assigned to me that are not yet accepted
+        console.log("[btnInbox] clicked. currentEndpoint:", currentEndpoint);
+        setActive(btnInbox);
+        displayTodos();
+      });
+    }
 
 
     // ----- due-date filter dropdown -----

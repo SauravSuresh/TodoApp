@@ -49,6 +49,9 @@ func (s *TodoService) Create(ctx context.Context, req models.CreateTodoRequest, 
 	if req.AssignedTo == "" {
 		todomodel.AssignedTo = uid
 	}
+	if todomodel.AssignedTo == todomodel.CreatedBy {
+		todomodel.Accepted = true
+	}
 
 	return s.repo.Create(ctx, todomodel)
 }
@@ -105,6 +108,9 @@ func (s *TodoService) Update(ctx context.Context, id primitive.ObjectID, updateO
 	}
 	if updateObj.DueDateMs != nil {
 		updateFields["duedate"] = primitive.DateTime(*updateObj.DueDateMs)
+	}
+	if updateObj.Accepted {
+		updateFields["accepted"] = updateObj.Accepted
 	}
 	if len(updateFields) == 0 {
 		return nil, fmt.Errorf("No fields to udpate")

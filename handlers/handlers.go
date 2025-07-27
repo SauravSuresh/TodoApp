@@ -148,7 +148,14 @@ func (t *TodoHandlers) GetAssignedTodoHandler(rw http.ResponseWriter, r *http.Re
 	}
 
 	var todoList []models.Todo
-	todoList, err = t.TodoSvc.Get(r.Context(), map[string]interface{}{"assignedto": uid}, r)
+	todoList, err = t.TodoSvc.Get(
+		r.Context(),
+		map[string]interface{}{
+			"assignedto": uid,
+			"accepted":   true,
+		},
+		r,
+	)
 	if err != nil {
 		rnd.JSON(rw, http.StatusInternalServerError, renderer.M{
 			"message": "Could not get todos",
@@ -162,6 +169,7 @@ func (t *TodoHandlers) GetAssignedTodoHandler(rw http.ResponseWriter, r *http.Re
 }
 
 func (t *TodoHandlers) GetInboxTodoHandler(rw http.ResponseWriter, r *http.Request) {
+	fmt.Println("sdadas")
 	uid, err := utils.UserIDFromContext(r)
 	if err != nil {
 		rnd.JSON(rw, http.StatusUnauthorized, renderer.M{"message": err.Error()})
@@ -182,6 +190,12 @@ func (t *TodoHandlers) GetInboxTodoHandler(rw http.ResponseWriter, r *http.Reque
 			"message": "Could not get todos",
 			"error":   err.Error(),
 		})
+	}
+	log.Printf("GetInboxTodoHandler — retrieved %d todos", len(todoList))
+	if payload, mErr := json.Marshal(todoList); mErr != nil {
+		log.Printf("GetInboxTodoHandler — failed to marshal todos: %v", mErr)
+	} else {
+		log.Printf("GetInboxTodoHandler — todos: %s", string(payload))
 	}
 	rnd.JSON(rw, http.StatusOK, models.GetObjectResponse{
 		Message: "All Todos retrieved",
